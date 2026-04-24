@@ -18,6 +18,7 @@ Rigorous plan→build→review workflow. Progressive clarification, parallel sub
 - [The adversarial review pair](#the-adversarial-review-pair)
 - [Review scopes](#review-scopes)
 - [Review-loop termination strategies](#review-loop-termination-strategies)
+- [Estimating token cost](#estimating-token-cost)
 - [Deploy command resolution](#deploy-command-resolution)
 - [Worktree lifecycle](#worktree-lifecycle)
 - [Repo layout](#repo-layout)
@@ -246,6 +247,35 @@ Chosen at plan time (Tier 4 of clarification). Three options:
 - **Single-pass** — one review, fix `blocker`+`high` items, continue. Predictable cost, no surprises. Best for small changes.
 - **Iterate (max 2 rounds)** — after fixes, re-run both reviewers with their round-1 findings + the updated diff. Hard cap at 2 review rounds. If blockers remain, stops and surfaces to user. Roughly 2× review cost; more thorough.
 - **User decides after first review** — presents merged findings and asks: fix-and-commit / fix-and-re-review / surface-and-stop. Maximum control at the cost of one more interactive step.
+
+## Estimating token cost
+
+For a diff of `X` tokens (the `+`/`-` lines the main thread produces), a single-pass run roughly costs:
+
+- **Fixed overhead** — ~80–150K tokens. Dominated by the exploration + planning subagents in Phases 3–4.
+- **Implementation** — ~6–10 × X. Main thread reads 5–9× more context than it outputs per code token.
+- **Review pair** — ~max(25K, 2X + 25K). Each of two reviewers reads the full diff plus ~10K of fixed context.
+- **Fix cycle** — ~2–3 × X. Fixes typically touch 20–40% of the original diff plus context re-reads.
+
+### Approximate totals (single-pass mode)
+
+| Diff size (X) | Change size | Review | Fix | **Total** |
+|---|---|---|---|---|
+| 500 | tiny tweak | ~26K | ~1.5K | **~110K** |
+| 2,000 | small feature | ~29K | ~5K | **~140K** |
+| 10,000 | medium feature | ~45K | ~25K | **~280K** |
+| 50,000 | large refactor | ~125K | ~125K | **~850K** |
+
+### Modifiers
+
+- **`iterate` termination mode** — roughly 2× the review + fix costs (max 2 rounds)
+- **`user-decides` termination** — behaves like single-pass on the happy path
+- **Tier 3 clarification triggered** — adds ~4K
+- **3 Explore subagents instead of 1** — adds ~30K to overhead
+
+### Caveats
+
+These figures are derived from the skill's phase structure and typical Anthropic API patterns — not measured from instrumented runs. Expect ±30–50% variance per invocation. Use as a rough budget sanity check before committing to a large change, not a precise forecast.
 
 ## Deploy command resolution
 
