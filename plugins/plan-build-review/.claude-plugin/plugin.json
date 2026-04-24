@@ -1,7 +1,7 @@
 {
   "name": "plan-build-review",
   "description": "Rigorous think→plan→do→review workflow with progressive clarification, parallel subagent exploration, adversarial Opus+Sonnet review, and optional commit/push/deploy/worktree finishing.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Darren Podolak"
   },

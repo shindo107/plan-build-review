@@ -51,6 +51,8 @@ Tiers:
 
 ## Phase 3 — Explore in parallel
 
+**Repo-map preamble**: Before spawning Explore agents, check for `.claude/repo-map.md` in the target repo root. If present, read its first line — it should be `<!-- repo-map head: <sha> -->`. The map is **fresh** iff that SHA is an ancestor of current `HEAD` (`git merge-base --is-ancestor <sha> HEAD`) AND `git diff --name-only <sha>..HEAD -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.py' '*.go' '*.rs' '*.java' '*.rb'` returns nothing. (The canonical extension list lives in `references/repo-map.md` — keep the three copies in sync.) If fresh, pass it as shared context to each Explore agent and instruct them to treat the map as authoritative for file existence — their exploration budget should go to confirming patterns and finding usages, not re-listing files. If missing or stale, proceed normally. See `references/repo-map.md` for format and the `scripts/generate-repo-map.sh` helper users run to create/refresh the map.
+
 Spawn up to 3 `Explore` subagents **in a single message** (multiple tool calls) — never serially. Each gets a distinct search focus. Often 1 is enough; use more only when scope is uncertain or spans multiple areas.
 
 Suggested focuses:
@@ -66,13 +68,35 @@ Spawn **1 Plan subagent** with: user intent (T1/T2/T3 answers), Phase-3 findings
 
 Write the final plan (recommended approach only — not alternatives) to the plan file recorded in Phase 1.
 
-Call `ExitPlanMode` — this surfaces the plan to the user and **blocks on their approval**. Do not proceed to Phase 5 until the user approves.
+Call `ExitPlanMode` — this surfaces the plan to the user and **blocks on their approval**. Do not proceed to Phase 4.5 until the user approves.
+
+## Phase 4.5 — Pre-implementation checkpoint
+
+After plan approval, before breaking the plan into tasks. Creates a one-command rollback path if Phase 6 review reveals the implementation is unsalvageable.
+
+1. **Dirty-tree check**: run `git status`. If there are unstaged/staged files unrelated to this task, stop and ask the user before proceeding. (This mirrors the Phase 8 check — promoted earlier so you don't build on top of pollution. Keep the Phase 8 check too; it catches mid-implementation drift this earlier check can't see.) In worktree mode this check always passes by construction — keep it for symmetry.
+2. **Record base SHA**: `git rev-parse HEAD`. Store this — Phase 6a uses it as the diff base instead of re-recording.
+3. **Create checkpoint**:
+   - **Worktree mode**: no-op. The fresh branch is already the checkpoint.
+   - **In-place mode**: create a lightweight tag with `git tag plan-build-review-base/<YYYYMMDDHHMMSS>` pointing at HEAD (seconds granularity — avoids collision on same-minute reruns). If the exact tag already exists from an aborted prior run, append `-N` with the next free integer (`-2`, `-3`, …). Rollback is `git reset --hard <the-chosen-tag>`.
+4. **Append a `## Rollback` section to the plan file** (path captured in Phase 1, contents written in Phase 4) with instructions appropriate to the mode:
+   - **In-place mode**: the chosen tag name + the exact `git reset --hard <tag>` command.
+   - **Worktree mode**: the rollback path is "do not merge and discard the branch" — document `git worktree remove .worktrees/<slug>` + `git branch -D <branch>` as the rollback, since no tag exists.
 
 ## Phase 5 — Implement
 
 1. Use the session's task-tracking tool to break the plan into discrete steps. In Claude Code this is typically `TaskCreate`/`TaskUpdate`/`TaskList` (deferred — load via `ToolSearch` if needed) or the built-in equivalent. Mark each task `in_progress` before starting, `completed` as soon as finished — don't batch.
-2. Delegate **independent** work to `general-purpose` subagents in parallel only where it saves meaningful wall time. Don't over-delegate trivial edits — there's handoff overhead.
-3. Run linters/tests as you go; don't wait until the end.
+2. Delegate **independent** work to `general-purpose` subagents in parallel only where it saves meaningful wall time; spawn them with `model: sonnet` by default, and only escalate an individual subagent to `model: opus` when the task requires architectural judgment the adversarial Opus reviewer in Phase 6c would otherwise be asked to repair. Don't over-delegate trivial edits — there's handoff overhead.
+3. **Auto-lint after each task**. After each Phase-5 task completes, run the project's lint + type-check and only then mark the task `completed`. Detect the command using a similar three-step resolution to Phase 10 (CLAUDE.md → package.json → binary on PATH), but with a graceful skip instead of Phase 10's error-and-stop:
+   a. Project `CLAUDE.md` — `## Lint` section or an explicit `lint command:` line (not a keyword search).
+   b. `package.json` → `scripts.lint` → run `npm run lint`.
+   c. Tooling binary on `PATH` (`eslint`, `ruff`, `mypy`) → run with default config.
+   d. **None found** → log a one-line note (`no lint command detected, skipping per-task lint pass`) and proceed. Do not error.
+
+   On violations: attempt auto-fix only if the detected tool supports it (`eslint --fix`, `ruff check --fix`, or if the project's `npm run lint` script already includes a fix flag). If the tool does **not** auto-fix, surface the diagnostics and resolve them manually before marking the task complete. Do not silently add `--fix` to a user's lint command that didn't already use it — that changes observable behavior.
+
+   If per-task lint is noticeably slow (>30s per run) on large monorepos, the main thread may batch lint at the end of a task group instead — but the default is per-task.
+4. Tests: run the project's test command at milestones (end of each meaningful task group), not after every edit.
 
 ## Phase 6 — Adversarial review
 
@@ -83,7 +107,7 @@ Call `ExitPlanMode` — this surfaces the plan to the user and **blocks on their
 
 Run `git diff` against the correct base:
 - **Worktree mode**: `git diff <main-branch-name>...HEAD` (three dots — merge base). Detect the default branch via `git remote show origin | grep 'HEAD branch'` or `git symbolic-ref refs/remotes/origin/HEAD`.
-- **In-place mode, this task has its own commits**: record the base SHA at the start of Phase 5 (`git rev-parse HEAD`) and diff against that: `git diff <base-sha>..HEAD` plus any staged/unstaged changes.
+- **In-place mode, this task has its own commits**: use the base SHA recorded in Phase 4.5 and diff against that: `git diff <base-sha>..HEAD` plus any staged/unstaged changes.
 - **In-place mode, nothing committed yet**: `git diff HEAD` (covers staged + unstaged).
 
 If the diff is larger than ~2000 lines, write it to a temp file (`/tmp/plan-build-review-diff-<timestamp>.patch`) and pass the path to reviewers instead of inlining.

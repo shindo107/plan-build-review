@@ -21,6 +21,7 @@ Rigorous plan→build→review workflow. Progressive clarification, parallel sub
 - [Estimating token cost](#estimating-token-cost)
 - [Deploy command resolution](#deploy-command-resolution)
 - [Worktree lifecycle](#worktree-lifecycle)
+- [Speeding up repeat runs with a repo map](#speeding-up-repeat-runs-with-a-repo-map)
 - [Repo layout](#repo-layout)
 - [Requirements](#requirements)
 - [Troubleshooting](#troubleshooting)
@@ -139,15 +140,19 @@ Runs only if you used the `worktree` arg. Happens after Tier-1 intent clarificat
 
 ### Phase 3 — Explore in parallel
 
-Spawns up to 3 `Explore` subagents **in a single message** (parallel, not serial). Each gets a distinct search focus — existing utilities, architectural patterns, test conventions — and returns file paths and short summaries. Often one agent is enough; more only when scope is genuinely uncertain.
+Spawns up to 3 `Explore` subagents **in a single message** (parallel, not serial). Each gets a distinct search focus — existing utilities, architectural patterns, test conventions — and returns file paths and short summaries. Often one agent is enough; more only when scope is genuinely uncertain. Before spawning, the skill checks for a fresh `.claude/repo-map.md` and, if present, passes it as shared context so agents spend their budget confirming patterns rather than re-listing files. See [Speeding up repeat runs with a repo map](#speeding-up-repeat-runs-with-a-repo-map).
 
 ### Phase 4 — Design
 
 Spawns a single `Plan` subagent with Phase 1-3 outputs. It drafts the implementation approach. The main thread reviews, writes the final plan (recommended approach only, not alternatives) to the plan file, then calls `ExitPlanMode` — which surfaces the plan and blocks until you approve.
 
+### Phase 4.5 — Pre-implementation checkpoint
+
+Runs after plan approval, before implementation starts. Four steps: (a) dirty-tree check — stops and asks if there are unrelated uncommitted changes, so you don't build on top of pollution; (b) records the base SHA for Phase 6a's diff; (c) creates a lightweight rollback tag `plan-build-review-base/<YYYYMMDDHHMMSS>` pointing at HEAD (in-place mode only — worktree mode's fresh branch is already a checkpoint); (d) appends a `## Rollback` section to the plan file with mode-appropriate instructions (`git reset --hard <tag>` for in-place; `git worktree remove` + `git branch -D` for worktree). The escape hatch is visible in the plan from the moment implementation starts.
+
 ### Phase 5 — Implement
 
-Breaks the plan into discrete tracked tasks. Delegates independent work to general-purpose subagents in parallel where that actually saves wall time (not for trivial edits — handoff has overhead). Runs linters and tests as it goes, not only at the end.
+Breaks the plan into discrete tracked tasks. Delegates independent work to general-purpose subagents in parallel where that actually saves wall time (not for trivial edits — handoff has overhead). **Implementation subagents run on Sonnet by default**; the main thread only escalates an individual subagent to Opus when architectural judgment is required that the Phase 6c Opus reviewer would otherwise have to repair. After each task, the skill runs the project's lint + type-check and auto-fixes violations before marking the task complete — detected via `CLAUDE.md` → `package.json` `scripts.lint` → tooling binary on `PATH`, in that order.
 
 ### Phase 6 — Adversarial review
 
@@ -252,8 +257,8 @@ Chosen at plan time (Tier 4 of clarification). Three options:
 
 For a diff of `X` tokens (the `+`/`-` lines the main thread produces), a single-pass run roughly costs:
 
-- **Fixed overhead** — ~80–150K tokens. Dominated by the exploration + planning subagents in Phases 3–4.
-- **Implementation** — ~6–10 × X. Main thread reads 5–9× more context than it outputs per code token.
+- **Fixed overhead** — ~80–150K tokens. Dominated by the exploration + planning subagents in Phases 3–4. A fresh `.claude/repo-map.md` can shave ~10–30K off the low end by letting Explore agents skip structural re-discovery.
+- **Implementation** — ~6–10 × X. Main thread reads 5–9× more context than it outputs per code token. Implementation subagents run on Sonnet by default (the main thread's model applies only to work it does directly), so roughly 40–60% of implementation tokens bill at Sonnet rates — ~3× cheaper input, ~5× cheaper output vs. Opus.
 - **Review pair** — ~max(25K, 2X + 25K). Each of two reviewers reads the full diff plus ~10K of fixed context.
 - **Fix cycle** — ~2–3 × X. Fixes typically touch 20–40% of the original diff plus context re-reads.
 
@@ -272,6 +277,8 @@ For a diff of `X` tokens (the `+`/`-` lines the main thread produces), a single-
 - **`user-decides` termination** — behaves like single-pass on the happy path
 - **Tier 3 clarification triggered** — adds ~4K
 - **3 Explore subagents instead of 1** — adds ~30K to overhead
+- **Implementation subagent escalated to Opus** — adds ~2–3× the cost of that subagent's share of implementation tokens
+- **Fresh repo map available** — saves ~10–30K of Phase 3 overhead
 
 ### Caveats
 
@@ -303,6 +310,24 @@ Only active when the `worktree` arg is present.
 6. **All subsequent phases** run inside the worktree.
 7. **Phase 11** asks whether to merge. Yes → exits the worktree, `git merge --no-ff <branch>`, `git push`, `git worktree remove`, `git branch -d`. No → leaves the worktree intact and prints resume instructions.
 
+## Speeding up repeat runs with a repo map
+
+Phase 3 normally re-discovers repo structure from scratch on every run — parallel Explore subagents walk the file tree and summarize what they find. For repos you'll run the skill against repeatedly, pre-computing a repo map once and letting Explore agents use it as shared context is a meaningful Phase 3 speedup.
+
+Generate or refresh the map from the repo root:
+
+```bash
+bash ~/.claude/plugins/.../skills/plan-build-review/scripts/generate-repo-map.sh
+# or, for the local-dev install:
+bash ~/ai-tools/plan-build-review/plugins/plan-build-review/skills/plan-build-review/scripts/generate-repo-map.sh
+```
+
+The helper writes `.claude/repo-map.md` at the repo root with a SHA freshness header, per-directory sections, and per-file exported signatures. Pure bash + git + grep — no language toolchains required. It's idempotent: running twice in a row produces the same output.
+
+The skill checks for the map at the start of Phase 3. If the SHA in the header is an ancestor of current `HEAD` **and** no source files have changed since (checked across the canonical 11-extension list: `.ts .tsx .js .jsx .mjs .cjs .py .go .rs .java .rb`), the map is fresh and gets passed to Explore agents with an instruction to treat it as authoritative for file existence. If stale or missing, Phase 3 runs normally — nothing breaks.
+
+Full format spec and freshness policy: [`references/repo-map.md`](./plugins/plan-build-review/skills/plan-build-review/references/repo-map.md). Opt-in — the skill never generates or refreshes the map automatically.
+
 ## Repo layout
 
 ```
@@ -315,11 +340,14 @@ plan-build-review/                                          # repo root = market
 │       │   └── plugin.json                                 # plugin manifest
 │       └── skills/
 │           └── plan-build-review/
-│               ├── SKILL.md                                # main workflow (~175 lines)
-│               └── references/
-│                   ├── progressive-disclosure.md           # clarification tier catalog
-│                   ├── review-scopes.md                    # baseline scopes + dynamic triggers
-│                   └── adversarial-pair.md                 # reviewer briefing templates
+│               ├── SKILL.md                                # main workflow
+│               ├── references/
+│               │   ├── progressive-disclosure.md           # clarification tier catalog
+│               │   ├── review-scopes.md                    # baseline scopes + dynamic triggers
+│               │   ├── adversarial-pair.md                 # reviewer briefing templates
+│               │   └── repo-map.md                         # repo-map format + freshness policy
+│               └── scripts/
+│                   └── generate-repo-map.sh                # opt-in repo-map generator
 ├── README.md                                               # this file
 ├── LICENSE                                                 # MIT
 └── .gitignore
@@ -337,6 +365,7 @@ Architectural note: `SKILL.md` stays under ~300 lines so it loads quickly into c
   - A task-tracking tool (`TaskCreate`/`TaskUpdate`/`TaskList` or equivalent) — used in Phase 5
 - **Git** — required for all git-action modes and for worktree lifecycle
 - **A deploy command** — only if you use the `deploy` arg (see [Deploy command resolution](#deploy-command-resolution))
+- **`bash` + `grep`** — only if you choose to run `scripts/generate-repo-map.sh` (standard on any POSIX system; no other runtime)
 
 No other dependencies. The skill itself is pure markdown — no runtime, no npm install, no build step.
 
