@@ -1,10 +1,10 @@
-# deepwork
+# plan-build-review
 
 A Claude Code skill that wraps a rigorous **think → plan → do → review** workflow around whatever implementation task you throw at it. Replaces the "paste the same planning prompt every time" pattern with a single command.
 
 ## What it does
 
-When invoked, `/deepwork` (or `/deepwork:deepwork` when installed as a plugin):
+When invoked, `/plan-build-review` (or `/plan-build-review:plan-build-review` when installed as a plugin):
 
 1. **Parses args** — `commit` (default) / `push` / `deploy`, plus orthogonal `worktree`
 2. **Enters plan mode** — no edits until you approve
@@ -26,23 +26,23 @@ When invoked, `/deepwork` (or `/deepwork:deepwork` when installed as a plugin):
 ### As a plugin (recommended for other users)
 
 ```
-/plugin marketplace add https://github.com/shindo107/deepwork
-/plugin install deepwork@darren-ai-tools
+/plugin marketplace add https://github.com/shindo107/plan-build-review
+/plugin install plan-build-review@darren-ai-tools
 ```
 
-Invoke as `/deepwork:deepwork`. *(Note: exact invocation syntax depends on your Claude Code version's plugin-namespacing rules — if `/deepwork:deepwork` isn't recognized, try `/deepwork` or check `/help` for the installed form.)*
+Invoke as `/plan-build-review:plan-build-review`. *(Note: exact invocation syntax depends on your Claude Code version's plugin-namespacing rules — if `/plan-build-review:plan-build-review` isn't recognized, try `/plan-build-review` or check `/help` for the installed form.)*
 
 ### Local dev (for editing the skill itself)
 
 Clone the repo, then symlink the skill directory into Claude Code's global skills path:
 
 ```bash
-git clone https://github.com/shindo107/deepwork ~/ai-tools/deepwork
+git clone https://github.com/shindo107/plan-build-review ~/ai-tools/plan-build-review
 mkdir -p ~/.claude/skills
-ln -s ~/ai-tools/deepwork/plugins/deepwork/skills/deepwork ~/.claude/skills/deepwork
+ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/skills/plan-build-review ~/.claude/skills/plan-build-review
 ```
 
-Invoke as `/deepwork`. Edits to files in `~/ai-tools/deepwork/` take effect immediately — no reinstall.
+Invoke as `/plan-build-review`. Edits to files in `~/ai-tools/plan-build-review/` take effect immediately — no reinstall.
 
 ## Args
 
@@ -56,10 +56,10 @@ Invoke as `/deepwork`. Edits to files in `~/ai-tools/deepwork/` take effect imme
 
 Args compose. Position doesn't matter. Examples:
 
-- `/deepwork` — commit only, in place
-- `/deepwork push` — commit + push, in place
-- `/deepwork deploy worktree` — worktree + commit + push + deploy
-- `/deepwork worktree commit` — worktree + commit (redundant `commit` is fine)
+- `/plan-build-review` — commit only, in place
+- `/plan-build-review push` — commit + push, in place
+- `/plan-build-review deploy worktree` — worktree + commit + push + deploy
+- `/plan-build-review worktree commit` — worktree + commit (redundant `commit` is fine)
 
 ## How `deploy` resolves the deploy command
 
@@ -88,7 +88,7 @@ Plus 1–2 **dynamic scopes** synthesized from the actual diff. Examples:
 - Added table with `tenant_id` → suggests **RLS policy correctness**
 - Touched `src/app/(app)/**` → suggests **dark-theme + mobile safe-area conformance**
 
-See `plugins/deepwork/skills/deepwork/references/review-scopes.md` for the full trigger table.
+See `plugins/plan-build-review/skills/plan-build-review/references/review-scopes.md` for the full trigger table.
 
 ## Review-loop termination
 
@@ -101,15 +101,15 @@ Chosen at plan time (T4 of clarification):
 ## Repo layout
 
 ```
-deepwork/                                             # repo = marketplace
+plan-build-review/                                             # repo = marketplace
 ├── .claude-plugin/
-│   └── marketplace.json                              # lists deepwork plugin
+│   └── marketplace.json                              # lists plan-build-review plugin
 ├── plugins/
-│   └── deepwork/                                     # plugin root
+│   └── plan-build-review/                                     # plugin root
 │       ├── .claude-plugin/
 │       │   └── plugin.json                           # plugin manifest
 │       └── skills/
-│           └── deepwork/
+│           └── plan-build-review/
 │               ├── SKILL.md                          # main workflow
 │               └── references/
 │                   ├── progressive-disclosure.md     # tier definitions

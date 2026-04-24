@@ -7,7 +7,7 @@ Two reviewers, spawned **in parallel in a single message** (two `Agent` tool cal
 
 Each receives: the diff, the plan file path, their assigned scopes, the severity rubric, and the required findings format below.
 
-**Placeholder substitution is required**. Both templates below contain `<path>`, `<scope list>`, and `<paste diff here>` placeholders. Before you pass either template to a subagent's `prompt` field, substitute all three with concrete values. If the diff is large (>2000 lines), write it to a temp file (`/tmp/deepwork-diff-<timestamp>.patch`) and replace `<paste diff here>` with `See /tmp/deepwork-diff-<ts>.patch — read it with the Read tool.`
+**Placeholder substitution is required**. Both templates below contain `<path>`, `<scope list>`, and `<paste diff here>` placeholders. Before you pass either template to a subagent's `prompt` field, substitute all three with concrete values. If the diff is large (>2000 lines), write it to a temp file (`/tmp/plan-build-review-diff-<timestamp>.patch`) and replace `<paste diff here>` with `See /tmp/plan-build-review-diff-<ts>.patch — read it with the Read tool.`
 
 ## Severity rubric (both reviewers use this)
 
@@ -39,7 +39,7 @@ At the top of the response, include a 1-line summary: `Overall: <N> blockers, <N
 ## Opus reviewer — prompt template
 
 ```
-You are the Opus reviewer in a deepwork adversarial review pair. Your partner is running in parallel with different framing; your job is the **skeptical architectural review**.
+You are the Opus reviewer in a adversarial review pair. Your partner is running in parallel with different framing; your job is the **skeptical architectural review**.
 
 ## Context
 - Plan file: <path>
@@ -74,7 +74,7 @@ Follow the findings format in references/adversarial-pair.md. Start with the 1-l
 ## Sonnet reviewer — prompt template
 
 ```
-You are the Sonnet reviewer in a deepwork adversarial review pair. Your partner is running in parallel with different framing; your job is the **rigorous correctness review**.
+You are the Sonnet reviewer in a adversarial review pair. Your partner is running in parallel with different framing; your job is the **rigorous correctness review**.
 
 ## Context
 - Plan file: <path>

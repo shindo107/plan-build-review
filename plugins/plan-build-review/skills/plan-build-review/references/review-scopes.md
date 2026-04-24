@@ -4,7 +4,7 @@ The adversarial review pair needs scope assignments per reviewer. This file cata
 
 ## The four baseline scopes
 
-Every `deepwork` review offers these four as multi-select options. Reviewers can share scopes — overlap surfaces divergence, which is a feature.
+Every `plan-build-review` review offers these four as multi-select options. Reviewers can share scopes — overlap surfaces divergence, which is a feature.
 
 ### 1. Correctness, regressions, & test coverage
 

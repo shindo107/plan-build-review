@@ -1,9 +1,9 @@
 {
-  "name": "deepwork",
+  "name": "plan-build-review",
   "description": "Rigorous think→plan→do→review workflow with progressive clarification, parallel subagent exploration, adversarial Opus+Sonnet review, and optional commit/push/deploy/worktree finishing.",
   "version": "0.1.0",
   "author": {
     "name": "Darren Podolak"
   },
-  "homepage": "https://github.com/shindo107/deepwork"
+  "homepage": "https://github.com/shindo107/plan-build-review"
 }

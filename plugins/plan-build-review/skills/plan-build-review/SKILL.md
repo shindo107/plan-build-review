@@ -1,9 +1,9 @@
 ---
-name: deepwork
-description: Rigorous think→plan→do→review workflow. Use when the user invokes /deepwork, /deepwork:deepwork, or asks for a planned and reviewed implementation with optional git worktree, commit, push, or deploy finishing.
+name: plan-build-review
+description: Rigorous think→plan→do→review workflow. Use when the user invokes /plan-build-review, /plan-build-review:plan-build-review, or asks for a planned and reviewed implementation with optional git worktree, commit, push, or deploy finishing.
 ---
 
-# deepwork
+# plan-build-review
 
 Execute the following workflow end-to-end when invoked. Do not skip phases; do not collapse them. Every phase has a purpose that compounds.
 
@@ -18,7 +18,7 @@ Inspect `$ARGUMENTS` for these tokens (position-insensitive, case-insensitive):
 | `deploy` | Git action = commit + push + deploy. **Runs deploy with no confirmation prompt** (user preference). |
 | `worktree` | Work happens inside a fresh git worktree (see Phase 2.5). Orthogonal — composes with any git-action. |
 
-Examples: `/deepwork` → commit. `/deepwork push` → commit+push. `/deepwork deploy worktree` → worktree + commit+push+deploy.
+Examples: `/plan-build-review` → commit. `/plan-build-review push` → commit+push. `/plan-build-review deploy worktree` → worktree + commit+push+deploy.
 
 **Before any destructive action** (worktree creation, edits, commits, deploy), emit a one-line confirmation: `Parsed args: git-action=<X>, worktree=<true|false>`. This lets the user course-correct before anything consequential happens. (Do not treat this as literally the "first line" of output — plan-mode entry or tool calls may come earlier.)
 
@@ -86,7 +86,7 @@ Run `git diff` against the correct base:
 - **In-place mode, this task has its own commits**: record the base SHA at the start of Phase 5 (`git rev-parse HEAD`) and diff against that: `git diff <base-sha>..HEAD` plus any staged/unstaged changes.
 - **In-place mode, nothing committed yet**: `git diff HEAD` (covers staged + unstaged).
 
-If the diff is larger than ~2000 lines, write it to a temp file (`/tmp/deepwork-diff-<timestamp>.patch`) and pass the path to reviewers instead of inlining.
+If the diff is larger than ~2000 lines, write it to a temp file (`/tmp/plan-build-review-diff-<timestamp>.patch`) and pass the path to reviewers instead of inlining.
 
 ### 6b. Synthesize dynamic scopes + ask per-reviewer scope config
 
@@ -110,7 +110,7 @@ Reviewers may share scopes — overlap surfaces divergence.
 **Substitute placeholders explicitly** before passing the template to the subagent prompt:
 - `<path>` → plan file path recorded in Phase 1
 - `<scope list>` → comma-separated scopes assigned in 6b
-- `<paste diff here>` → the diff output from 6a (or `See /tmp/deepwork-diff-<ts>.patch` if it was written to a file)
+- `<paste diff here>` → the diff output from 6a (or `See /tmp/plan-build-review-diff-<ts>.patch` if it was written to a file)
 
 (If your Claude Code version does not support the `model` override on the `Agent` tool, degrade gracefully: run both reviewers with the default model but keep the adversarial framing. Log a note that model diversity was not available.)
 

@@ -6,9 +6,9 @@
   },
   "plugins": [
     {
-      "name": "deepwork",
+      "name": "plan-build-review",
       "description": "Think→plan→do→review workflow skill with adversarial review and optional git worktree / deploy finishing.",
-      "source": "./",
+      "source": "./plugins/plan-build-review",
       "category": "workflow",
       "author": {
         "name": "Darren Podolak"
