@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "darren-ai-tools",
+  "owner": {
+    "name": "Darren Podolak"
+  },
+  "plugins": [
+    {
+      "name": "deepwork",
+      "description": "Think→plan→do→review workflow skill with adversarial review and optional git worktree / deploy finishing.",
+      "source": "./",
+      "category": "workflow",
+      "author": {
+        "name": "Darren Podolak"
+      }
+    }
+  ]
+}
