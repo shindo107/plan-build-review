@@ -72,7 +72,7 @@ Two install paths depending on whether you're a consumer or a contributor.
 
 ```
 /plugin marketplace add https://github.com/shindo107/plan-build-review
-/plugin install plan-build-review@darren-ai-tools
+/plugin install plan-build-review@tabor-labs
 ```
 
 Invoke as `/plan-build-review:plan-build-review`.
