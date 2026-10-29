@@ -2,7 +2,9 @@
 
 > A Claude Code skill that wraps a rigorous **plan → build → review** workflow around any implementation task. Replaces the "paste the same planning prompt every time" pattern with one command.
 
-Rigorous plan→build→review workflow. Progressive clarification, parallel subagent exploration, adversarial Opus+Sonnet review with user-selected scopes, then commit/push/deploy/worktree finishing.
+Rigorous plan→build→review workflow. Progressive clarification, test-first bug fixes, parallel subagent exploration, adversarial Opus+Sonnet review with user-selected scopes and per-finding confidence, then commit/push/deploy/worktree finishing.
+
+**New in 1.2.0** — see [What changed in 1.2.0](#what-changed-in-120).
 
 ---
 
@@ -13,6 +15,7 @@ Rigorous plan→build→review workflow. Progressive clarification, parallel sub
 - [Quick start](#quick-start)
 - [Install](#install)
 - [Invocation & arguments](#invocation--arguments)
+- [What changed in 1.2.0](#what-changed-in-120)
 - [Workflow walkthrough](#workflow-walkthrough)
 - [Progressive disclosure: the clarification tiers](#progressive-disclosure-the-clarification-tiers)
 - [The adversarial review pair](#the-adversarial-review-pair)
@@ -118,6 +121,21 @@ All args are position-insensitive and case-insensitive. A git-action token and t
 | `/plan-build-review push worktree` | Worktree + push; then prompt-to-merge |
 | `/plan-build-review deploy worktree` | Worktree + full deploy pipeline; then prompt-to-merge |
 
+## What changed in 1.2.0
+
+Driven by a month of logged runs against a production codebase and a comparison of the loop against published guidance (Anthropic's Claude Code best practices, Beck on TDD, research on LLM self-correction). The loop was already strong at asking and reviewing; these changes close the gaps on **proving** the work.
+
+| Change | Why |
+|---|---|
+| **Typecheck runs with lint after every task** (Phase 5) | The old pass resolved only `scripts.lint`, so type errors in new test files reached the reviewers instead of being fixed at the task boundary. |
+| **Test-first is the default for bug fixes** (T3 + Phase 5) | Zero of ~9,000 logged prompts asked for a test before the code. A failing test is a pass/fail target the implementer can't argue with. |
+| **Test-integrity rule** (Phase 5) | Tests are never deleted, skipped, loosened or rewritten to get to green. A blocking test is a finding, not an obstacle. |
+| **Scratch-file rule + deploy-log hygiene** (Phases 5, 10) | A deploy log written into the repo root dirtied the tree and failed the next deploy. Temp output goes to the scratchpad or `/tmp`; Phase 10 checks `git status --porcelain` afterwards. |
+| **Per-finding Scenario + Confidence; verify before fixing** (Phase 6/7) | Reviewers always find something. Findings now carry a reachable scenario and an honest confidence; the main thread reads the cited code before fixing any blocker or high, and lists what it declined. |
+| **Visual target + before/after screenshots for UI tasks** (T1, Phases 4.5, 6a) | Spacing and colour described in words produced repeated correction rounds. If the project has screenshot tooling, reviewers get rendered before/after images and the user's target. |
+| **Attribution trailer from the session** (Phase 8) | The hard-coded model name went stale. |
+| **End-of-run `/clear` nudge** | Long contexts degrade; the plan file already holds everything needed to resume. |
+
 ## Workflow walkthrough
 
 Eleven phases. Each one exists because the one before it leaves something underspecified or unverified that the next one relies on. Skipping phases collapses the rigor.
@@ -132,7 +150,7 @@ Calls `EnterPlanMode`. From here until the plan is approved, the skill is read-o
 
 ### Phase 2 — Progressive-disclosure clarification
 
-Asks one tier of questions at a time, only descending when prior-tier answers leave something load-bearing ambiguous. See [Progressive disclosure](#progressive-disclosure-the-clarification-tiers).
+Asks one tier of questions at a time, only descending when prior-tier answers leave something load-bearing ambiguous. Two always-on additions: for UI tasks, T1 asks whether a screenshot or mockup exists to match (or whether to preserve the existing page untouched outside the named change); for bug fixes, T3's test-strategy question is always asked, with test-first recommended. See [Progressive disclosure](#progressive-disclosure-the-clarification-tiers).
 
 ### Phase 2.5 — Worktree setup (conditional)
 
@@ -148,27 +166,27 @@ Spawns a single `Plan` subagent with Phase 1-3 outputs. It drafts the implementa
 
 ### Phase 4.5 — Pre-implementation checkpoint
 
-Runs after plan approval, before implementation starts. Four steps: (a) dirty-tree check — stops and asks if there are unrelated uncommitted changes, so you don't build on top of pollution; (b) records the base SHA for Phase 6a's diff; (c) creates a lightweight rollback tag `plan-build-review-base/<YYYYMMDDHHMMSS>` pointing at HEAD (in-place mode only — worktree mode's fresh branch is already a checkpoint); (d) appends a `## Rollback` section to the plan file with mode-appropriate instructions (`git reset --hard <tag>` for in-place; `git worktree remove` + `git branch -D` for worktree). The escape hatch is visible in the plan from the moment implementation starts.
+Runs after plan approval, before implementation starts. Four steps: (a) dirty-tree check — stops and asks if there are unrelated uncommitted changes, so you don't build on top of pollution; (b) records the base SHA for Phase 6a's diff; (c) creates a lightweight rollback tag `plan-build-review-base/<YYYYMMDDHHMMSS>` pointing at HEAD (in-place mode only — worktree mode's fresh branch is already a checkpoint); (d) appends a `## Rollback` section to the plan file with mode-appropriate instructions (`git reset --hard <tag>` for in-place; `git worktree remove` + `git branch -D` for worktree); (e) for UI tasks, if the project has screenshot tooling (a `## Screenshots` section in `CLAUDE.md` or a `package.json` script mentioning `playwright`/`screenshot`), captures **before** screenshots of the affected routes into the scratchpad. The escape hatch is visible in the plan from the moment implementation starts.
 
 ### Phase 5 — Implement
 
-Breaks the plan into discrete tracked tasks. Delegates independent work to general-purpose subagents in parallel where that actually saves wall time (not for trivial edits — handoff has overhead). **Implementation subagents run on Sonnet by default**; the main thread only escalates an individual subagent to Opus when architectural judgment is required that the Phase 6c Opus reviewer would otherwise have to repair. After each task, the skill runs the project's lint + type-check and auto-fixes violations before marking the task complete — detected via `CLAUDE.md` → `package.json` `scripts.lint` → tooling binary on `PATH`, in that order.
+Breaks the plan into discrete tracked tasks. Delegates independent work to general-purpose subagents in parallel where that actually saves wall time (not for trivial edits — handoff has overhead). **Implementation subagents run on Sonnet by default**; the main thread only escalates an individual subagent to Opus when architectural judgment is required that the Phase 6c Opus reviewer would otherwise have to repair. Three rules govern the phase. **Test-first** (default for bug fixes, opt-in otherwise): write one failing test, show the failure, then implement without touching the test. **Test integrity** (always): no test is deleted, skipped, loosened or rewritten to get to green. **Scratch files** (always): logs, diffs and screenshots go to the scratchpad or `/tmp`, never the repo tree. After each task, the skill runs the project's lint **and** typecheck — each resolved separately via `CLAUDE.md` → `package.json` scripts (`lint`; `typecheck`/`tsc`/`type-check`) → tooling binary on `PATH` (falling back to `npx tsc --noEmit` when a `tsconfig.json` exists) — and fixes violations before marking the task complete.
 
 ### Phase 6 — Adversarial review
 
 The core differentiator. Three sub-steps:
 
-- **6a.** Establishes the diff against the correct base (worktree → `git diff main...HEAD`; in-place-with-commits → against recorded base SHA; in-place-with-nothing-committed → `git diff HEAD`). Large diffs go to a temp file rather than being inlined in the prompt.
+- **6a.** Establishes the diff against the correct base (worktree → `git diff main...HEAD`; in-place-with-commits → against recorded base SHA; in-place-with-nothing-committed → `git diff HEAD`). Large diffs go to a temp file rather than being inlined in the prompt. For UI tasks with before-screenshots from Phase 4.5, captures matching **after** screenshots and hands both sets (plus the user's visual target) to the reviewers.
 - **6b.** Synthesizes 1–2 dynamic scope suggestions specific to what the diff actually touches, then asks you to assign scopes per reviewer (multi-select).
 - **6c.** Spawns both reviewers in parallel in a single message: one `general-purpose` agent with `model: opus`, one with `model: sonnet`. Each gets the diff, the plan path, their assigned scopes, and the severity rubric.
 
 ### Phase 7 — Synthesize findings and apply fixes
 
-Merges both reports, de-duplicates, resolves conflicts (prefer the finding with a concrete file:line and concrete fix). Applies fixes per the termination strategy you chose in Phase 2.
+Merges both reports, de-duplicates, resolves conflicts (prefer the finding with a concrete file:line and concrete fix). Then **verifies before fixing**: every blocker and high (and any low-confidence medium) is checked against the cited code to confirm the scenario is reachable; anything that isn't is downgraded and listed under "Reviewed and declined". Applies the surviving fixes per the termination strategy you chose in Phase 2.
 
 ### Phase 8 — Commit
 
-Specific file staging only — never `git add .`. Detailed commit message in a loose template: subject, `why`, optional `what`/`non-obvious`, Co-Authored-By trailer. Dirty-tree check before staging — if there are unrelated pending changes, stops and asks before committing.
+Specific file staging only — never `git add .`. Detailed commit message in a loose template: subject, `why`, optional `what`/`non-obvious`, and the `Co-Authored-By` trailer **as supplied by the session for the current model** (never hard-coded). Dirty-tree check before staging — if there are unrelated pending changes, stops and asks before committing.
 
 ### Phase 9 — Push
 
@@ -176,11 +194,15 @@ Only if `push` or `deploy`. `git push -u origin <current-branch>` (sets upstream
 
 ### Phase 10 — Deploy
 
-Only if `deploy`. No confirmation. Resolves the deploy command from CLAUDE.md → package.json → Makefile → deploy scripts, in that order. Branch-safety warning if you're not on the default branch (logs but doesn't block).
+Only if `deploy`. No confirmation. Resolves the deploy command from CLAUDE.md → package.json → Makefile → deploy scripts, in that order. Branch-safety warning if you're not on the default branch (logs but doesn't block). Any captured deploy output goes to `/tmp` or the scratchpad, and the skill runs `git status --porcelain` afterwards to report anything the deploy leaked into the tree.
 
 ### Phase 11 — Merge prompt
 
 Only if `worktree`. Asks whether to merge the feature branch back to the default branch now. Yes → exits the worktree, merges with `--no-ff`, pushes, cleans up the worktree and the local branch. No → leaves the worktree intact with resume instructions.
+
+### End of run
+
+A one- or two-sentence summary, the plan file path (plan, rollback, screenshot locations), and a nudge to `/clear` before the next unrelated task — long contexts degrade, and everything needed to resume is already on disk.
 
 ## Progressive disclosure: the clarification tiers
 
@@ -190,7 +212,7 @@ Four tiers of clarification. Not all four are asked every time — the skill ski
 |---|---|---|
 | **T1 Intent** | Outcome, success criteria, non-goals | ✅ Always |
 | **T2 Scope** | Which files/modules, reuse vs. avoid | Only if T1 didn't cover it |
-| **T3 Implementation** | Test strategy, backwards-compat, perf/bundle/migration | Only if T1+T2 didn't cover it |
+| **T3 Implementation** | Test strategy, backwards-compat, perf/bundle/migration | Only if T1+T2 didn't cover it — except test strategy, always asked for bug fixes (test-first recommended) |
 | **T4 Review config** | Review-loop termination strategy | ✅ Always (reviewer-scope picker itself runs in Phase 6b) |
 
 Rule: descend only when the prior tier leaves a load-bearing decision ambiguous. The skill explicitly tries not to over-ask; if your one-line prompt already contains the answers, expect to see a single `AskUserQuestion` call and move on.
@@ -213,7 +235,7 @@ Two reviewers, spawned in parallel in a single message, running on different mod
 - Test gaps for newly implemented behavior
 - Type correctness, off-by-one, async ordering
 
-Both follow the same severity rubric (`blocker` / `high` / `medium` / `nit`) and return findings in a structured `severity / file:line / issue / fix` format so the main thread can merge deterministically. When both reviewers flag the same issue, that's a strong signal. When they disagree, the one with a citable file:line and concrete fix wins.
+Both follow the same severity rubric (`blocker` / `high` / `medium` / `nit`) and return findings in a structured `severity / file:line / issue / why / scenario / confidence / fix` format so the main thread can merge deterministically. **Scenario** is the concrete input or state that triggers the issue — what a test would set up. **Confidence** (`high` / `medium` / `low`) is mandatory and honest: `high` means the reviewer read the surrounding code and the scenario is reachable; `low` means a pattern match it couldn't confirm. Reviewers are told to rank rather than pile — a `medium` that would add abstraction for an unreachable case gets dropped, and nits are capped at 5. When both reviewers flag the same issue, that's a strong signal. When they disagree, the one with a citable file:line and concrete fix wins. For UI tasks, both reviewers also receive before/after screenshots and the user's visual target, and anything that moved outside the named change is a `high`.
 
 If your Claude Code version doesn't support per-invocation model overrides on the `Agent` tool, the skill degrades gracefully: both reviewers run on the default model, adversarial framing preserved, model diversity logged as unavailable.
 

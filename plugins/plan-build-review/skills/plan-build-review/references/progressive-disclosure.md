@@ -23,6 +23,15 @@ If the user's original prompt already named an outcome clearly, skip the questio
 
 > "To scope this correctly — what's explicitly **out of scope** for this change?"
 
+**Visual target (UI tasks only).** If the intent touches user-visible UI, add one question to the same T1 call rather than a new round:
+
+> "Do you have a visual target I should match?"
+> - Yes — I'll paste a screenshot / mockup path (Recommended: a picture beats a paragraph of spacing and colour words)
+> - Match the existing page — change only what I named, preserve current layout, colours and dimmed states
+> - No target — use your judgment
+
+Record the answer. "Match the existing page" is a standing constraint for the Phase 5 implementer and both Phase 6 reviewers: nothing outside the named change may move.
+
 ## T2 — Scope (conditional)
 
 **Ask if**: T1 didn't make clear which files/modules are affected, or if there are multiple plausible surfaces to touch.
@@ -47,10 +56,12 @@ Example questions:
 Example questions (pick the ones that matter, ask only those):
 
 > "Test strategy?"
-> - Add unit tests only
-> - Add integration tests only
-> - Both (Recommended for anything touching a data boundary)
+> - Test-first: write one failing test that reproduces it, show me the failure, then implement without touching the test (Recommended for bug fixes)
+> - Tests after: implement, then add unit and/or integration coverage
+> - Both unit and integration, test-first (Recommended for anything touching a data boundary)
 > - No tests for this change (explain why in notes)
+
+**Exception to the skip rule**: when T1 intent is a bug fix, ask the test-strategy question even if everything else in T3 is unambiguous, with test-first as the recommended option. A failing test is the one pass/fail target the implementer can't argue with. Whatever the answer, the Phase 5 test-integrity rule still applies: existing tests are never edited, skipped or deleted to get to green.
 
 > "Backwards-compat constraint?"
 > - Must preserve all existing behavior

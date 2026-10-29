@@ -36,8 +36,10 @@ Tiers:
 
 - **T1 Intent** — outcome, success criteria, non-goals. Always asked first.
 - **T2 Scope** — which files/modules, what to reuse or avoid.
-- **T3 Implementation** — test strategy, backwards-compat, perf/bundle/migration constraints. Skip if unambiguous.
+- **T3 Implementation** — test strategy, backwards-compat, perf/bundle/migration constraints. Skip if unambiguous — **except** the test-strategy question, which is always asked when T1 intent is a bug fix (default answer: **test-first**, see Phase 5).
 - **T4 Review config** — **always asked**: review-loop termination strategy (single-pass / iterate-max-2 / user-decides). The per-reviewer scope picker happens in Phase 6b, after exploration reveals the actual diff.
+
+**Visual target** (UI tasks only): if T1 intent touches user-visible UI, ask in the same T1 call whether a screenshot, mockup, or reference page exists. If the user supplies one, record its path — Phase 4.5 and Phase 6a capture before/after screenshots against it when the project has screenshot tooling.
 
 ## Phase 2.5 — Worktree setup (only if `worktree` arg)
 
@@ -82,16 +84,23 @@ After plan approval, before breaking the plan into tasks. Creates a one-command 
 4. **Append a `## Rollback` section to the plan file** (path captured in Phase 1, contents written in Phase 4) with instructions appropriate to the mode:
    - **In-place mode**: the chosen tag name + the exact `git reset --hard <tag>` command.
    - **Worktree mode**: the rollback path is "do not merge and discard the branch" — document `git worktree remove .worktrees/<slug>` + `git branch -D <branch>` as the rollback, since no tag exists.
+5. **Before-screenshots (UI tasks only)**: if the plan touches user-visible UI **and** the project has screenshot tooling (a `## Screenshots` section in `CLAUDE.md`, or a `package.json` script whose name or body mentions `playwright` or `screenshot`), run it now against the affected routes and save the output under the session scratchpad (or `/tmp/plan-build-review-shots-<ts>/before/`). Record the directory in the plan file. Skip silently if no tooling is found — never install one for this.
 
 ## Phase 5 — Implement
 
+**Scratch-file rule (all phases from here on)**: logs, diffs, packets, screenshots and any other temporary output go to the session scratchpad directory or `/tmp`, **never** into the repo working tree. A stray `deploy.log` in the repo root is a dirty tree, and a dirty tree fails Phase 8's check and most deploy scripts.
+
+0. **Test-first (default for bug fixes; opt-in otherwise via T3)**: before changing any source file, write one failing test that reproduces the bug or captures the new behavior. Run it and show the failure in the transcript. Only then implement, and make it pass **without editing the test**. If the test itself turns out to be wrong, stop and tell the user instead of changing it.
+   **Test-integrity rule (always on)**: never delete, skip (`.skip`, `xit`, `--no-verify`), loosen, or rewrite an existing test to get to green. A test that blocks you is a finding — surface it, don't silence it.
 1. Use the session's task-tracking tool to break the plan into discrete steps. In Claude Code this is typically `TaskCreate`/`TaskUpdate`/`TaskList` (deferred — load via `ToolSearch` if needed) or the built-in equivalent. Mark each task `in_progress` before starting, `completed` as soon as finished — don't batch.
 2. Delegate **independent** work to `general-purpose` subagents in parallel only where it saves meaningful wall time; spawn them with `model: sonnet` by default, and only escalate an individual subagent to `model: opus` when the task requires architectural judgment the adversarial Opus reviewer in Phase 6c would otherwise be asked to repair. Don't over-delegate trivial edits — there's handoff overhead.
-3. **Auto-lint after each task**. After each Phase-5 task completes, run the project's lint + type-check and only then mark the task `completed`. Detect the command using a similar three-step resolution to Phase 10 (CLAUDE.md → package.json → binary on PATH), but with a graceful skip instead of Phase 10's error-and-stop:
-   a. Project `CLAUDE.md` — `## Lint` section or an explicit `lint command:` line (not a keyword search).
-   b. `package.json` → `scripts.lint` → run `npm run lint`.
-   c. Tooling binary on `PATH` (`eslint`, `ruff`, `mypy`) → run with default config.
-   d. **None found** → log a one-line note (`no lint command detected, skipping per-task lint pass`) and proceed. Do not error.
+3. **Auto-lint + typecheck after each task**. After each Phase-5 task completes, run the project's lint **and** its type-check, and only then mark the task `completed`. Resolve each command separately (CLAUDE.md → package.json → binary on PATH), with a graceful skip instead of Phase 10's error-and-stop:
+   a. Project `CLAUDE.md` — `## Lint` / `## Typecheck` section or an explicit `lint command:` / `typecheck command:` line (not a keyword search).
+   b. `package.json` → `scripts.lint` → `npm run lint`; `scripts.typecheck` (or `scripts.tsc`, `scripts.type-check`) → `npm run <that>`.
+   c. Tooling binary on `PATH` (`eslint`, `ruff`, `mypy`) → run with default config. For typecheck: if a `tsconfig.json` exists and no script matched, run `npx tsc --noEmit`.
+   d. **None found** for either → log a one-line note (`no lint command detected…` / `no typecheck command detected…`) and proceed. Do not error.
+
+   Typecheck is **not** optional when a command exists: a lint pass that skips `tsc` is how type errors in new test files reach the reviewers instead of being fixed at the task boundary.
 
    On violations: attempt auto-fix only if the detected tool supports it (`eslint --fix`, `ruff check --fix`, or if the project's `npm run lint` script already includes a fix flag). If the tool does **not** auto-fix, surface the diagnostics and resolve them manually before marking the task complete. Do not silently add `--fix` to a user's lint command that didn't already use it — that changes observable behavior.
 
@@ -111,6 +120,8 @@ Run `git diff` against the correct base:
 - **In-place mode, nothing committed yet**: `git diff HEAD` (covers staged + unstaged).
 
 If the diff is larger than ~2000 lines, write it to a temp file (`/tmp/plan-build-review-diff-<timestamp>.patch`) and pass the path to reviewers instead of inlining.
+
+**After-screenshots (UI tasks only)**: if Phase 4.5 captured before-screenshots, run the same tooling again into a sibling `after/` directory. Pass both directories (and the user's visual target, if any) to both reviewers so they review the rendered result, not just the diff.
 
 ### 6b. Synthesize dynamic scopes + ask per-reviewer scope config
 
@@ -143,6 +154,7 @@ Reviewers may share scopes — overlap surfaces divergence.
 1. Merge both reviewer reports, grouped by file then severity.
 2. De-duplicate issues both reviewers raised (keep the one with the concrete fix; note "both reviewers flagged this" — strong signal).
 3. Resolve conflicts: prefer the finding with a citable `file:line` and concrete fix.
+3.5. **Verify before fixing.** Reviewers always find something. For every `blocker` and `high`, read the cited code yourself and confirm the failure scenario is real before touching anything. Downgrade a finding whose scenario can't actually occur, and say so in the summary. Findings tagged `confidence: low` by the reviewer need this check even at `medium`.
 4. Apply fixes per the user's termination strategy (T4):
    - **Single-pass**: fix `blocker` + `high` items. Log `medium`/`nit` for follow-up. Move to Phase 8.
    - **Iterate (max 2)**: fix → re-run both reviewers (Phase 6c) with updated diff + their round-1 findings + instruction to "focus on whether round-1 blockers/highs are resolved and flag any new issues introduced by the fixes." Hard cap at 2 review rounds. If blockers remain, surface to user via `AskUserQuestion` and stop.
@@ -161,8 +173,10 @@ Stage specific files only — **never** `git add .` or `git add -A`. Commit mess
 
 <anything non-obvious a future reader needs — only if there's real content>
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+<attribution trailer>
 ```
+
+**Attribution trailer**: use the exact `Co-Authored-By:` line the session's system reminder supplies for the current model. Do not hard-code a model name — it goes stale the moment the model changes. If the session supplies none, omit the trailer.
 
 Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`. Match the existing project's convention (check `git log --oneline -20`).
 
@@ -184,7 +198,7 @@ Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`. Match the exi
 
 **Branch-safety guard**: if the current branch is NOT the project's main deploy branch (usually `main`), emit a one-line warning before running — e.g., `Deploying from branch feat/foo (not main).` Still proceeds (no prompt per user preference), but the log is traceable.
 
-Stream deploy output; surface final status. If deploy fails, surface the error and stop (do not retry).
+Stream deploy output; surface final status. If you capture deploy output to a file, write it to the scratchpad or `/tmp/plan-build-review-deploy-<ts>.log` — **never** into the repo (see the Phase 5 scratch-file rule). After deploy finishes, run `git status --porcelain`; if anything new appeared in the tree, report it — that's a leak the next deploy would trip over. If deploy fails, surface the error and stop (do not retry).
 
 ## Phase 11 — Merge prompt (only if `worktree`)
 
@@ -195,4 +209,4 @@ After commit/push/deploy succeed, ask via `AskUserQuestion`: "Merge `<branch>` t
 
 ## End-of-run summary
 
-One or two sentences: what was built, what was reviewed, what's next (e.g., "ready to merge worktree" or "deploy succeeded"). No trailing recap beyond that.
+One or two sentences: what was built, what was reviewed, what's next (e.g., "ready to merge worktree" or "deploy succeeded"). Then one line: the plan file path (it holds the plan, rollback and screenshot locations) and a recommendation to `/clear` before the next unrelated task — long contexts degrade, and everything needed to resume is already on disk. No trailing recap beyond that.
