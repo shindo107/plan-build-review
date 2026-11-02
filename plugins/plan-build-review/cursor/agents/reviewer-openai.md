@@ -1,10 +1,11 @@
 ---
 name: reviewer-openai
 description: Read-only adversarial code reviewer pinned to the OpenAI model family. Spawned by the plan-build-review skill in Phase 6c with an explicit lens (architecture or correctness). Not for proactive use.
-# Verify this ID in Cursor's model picker (Settings → Models) and edit if it differs.
+# Verify this ID with `agent --list-models` in the Cursor CLI (or Settings → Models) and edit if it differs.
+# Convention: <base>-<effort>[-fast], e.g. gpt-5.5-medium, claude-opus-5-5-fast, grok-4.7-high-fast.
 # Cursor silently falls back to a compatible model when the pinned one is unavailable on your plan.
-# Other OpenAI options: gpt-5.4, gpt-5.3-codex-high
-model: gpt-5.5
+# Other OpenAI options: gpt-5.5-medium, gpt-5.6-sol-fast
+model: gpt-5.6-sol-medium
 readonly: true
 is_background: false
 ---

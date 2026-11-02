@@ -101,8 +101,19 @@ Invoke as `/plan-build-review`. Edits to files in `~/ai-tools/plan-build-review/
 
 The repo is also a Cursor plugin marketplace (`.cursor-plugin/marketplace.json`). Two options:
 
-1. **Plugin install (recommended — includes the reviewer roster).** Cursor → Customize → *From GitHub Repository* → `https://github.com/shindo107/plan-build-review` → install `plan-build-review`. Team admins can instead add it under Dashboard → Plugins & MCPs → *Add Marketplace* → *Import from Repo*. This installs the skill **and** the three `reviewer-*` subagents.
+1. **Plugin install (recommended — includes the reviewer roster).** Cursor → Customize → *From GitHub Repository* → `https://github.com/shindo107/plan-build-review` → install `plan-build-review`. Team admins can instead add it under Dashboard → Plugins & MCPs → *Add Marketplace* → *Import from Repo*. This installs the skill **and** the five `reviewer-*` subagents.
 2. **Symlink install (skill only).** Cursor reads `~/.claude/skills/` for compatibility, so the local-dev symlink above already exposes `/plan-build-review` in Cursor. The reviewer roster is not included; the skill falls back to two plain subagents and logs `model diversity unavailable`. To get the roster without the plugin: `mkdir -p ~/.cursor/agents && ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/cursor/agents/*.md ~/.cursor/agents/`.
+
+3. **Manual install (marketplace plugins disabled by an admin).** Cursor discovers skills and subagents from plain directories, so no plugin system is needed:
+
+   ```bash
+   git clone https://github.com/shindo107/plan-build-review ~/ai-tools/plan-build-review
+   mkdir -p ~/.cursor/skills ~/.cursor/agents
+   ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/skills/plan-build-review ~/.cursor/skills/plan-build-review
+   ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/cursor/agents/*.md ~/.cursor/agents/
+   ```
+
+   Restart Cursor. On Windows, copy the folders to `%USERPROFILE%\.cursor\skills\plan-build-review\` and `%USERPROFILE%\.cursor\agents\` instead of symlinking (re-copy after each `git pull`). For a per-project install that teammates get from the repo, use `.cursor/skills/` and `.cursor/agents/` inside the project.
 
 Invoke as `/plan-build-review` followed by the arguments in the same message, e.g. `/plan-build-review push worktree`. See [Running in Cursor](#running-in-cursor) for what differs.
 
@@ -272,12 +283,12 @@ Same phases, same questions, same review format. What differs is listed in `refe
 | Arguments | `$ARGUMENTS` substitution | The words after `/plan-build-review` in your message |
 | Plan mode | `EnterPlanMode` / `ExitPlanMode` | You toggle Plan mode (Shift+Tab); the skill writes `~/.cursor/plans/<slug>.md` and waits for an explicit "approved" |
 | Clarifying questions | `AskUserQuestion` (4-option cap) | Cursor's question tool, or an inline numbered question |
-| Reviewers | `general-purpose` + `model: opus` / `model: sonnet` | Two of `reviewer-anthropic`, `reviewer-openai`, `reviewer-google` |
+| Reviewers | `general-purpose` + `model: opus` / `model: sonnet` | Two of `reviewer-anthropic`, `reviewer-openai`, `reviewer-google`, `reviewer-xai`, `reviewer-meta` |
 | Worktree | `EnterWorktree` / `ExitWorktree` | You run `/worktree`, then `/apply-worktree` or `/delete-worktree` |
 
-**Model-family selection.** Cursor subagents pin a model in frontmatter and cannot be re-pointed at runtime, so the plugin ships one read-only reviewer per family. In T4 the skill asks which family your chat is running on; that family wrote the code and is excluded. It then spawns two reviewers from two other families (architecture lens first, correctness second) and reads the `Reviewer model:` line of each report, because Cursor silently substitutes a compatible model when a pinned one is unavailable on your plan. If the families collide it re-spawns once — only when an unused family is actually available, which with three roster files means only when your chat family was "other" — and otherwise logs `model diversity unavailable` and proceeds. Add a fourth roster file (see [Extending](#extending--customizing)) if you want a spare.
+**Model-family selection.** Cursor subagents pin a model in frontmatter and cannot be re-pointed at runtime, so the plugin ships one read-only reviewer per family (Anthropic, OpenAI, Google, xAI, Meta). In T4 the skill asks which family your chat is running on; that family wrote the code and is excluded. It then spawns two reviewers from two other families (architecture lens first, correctness second) and reads the `Reviewer model:` line of each report, because Cursor silently substitutes a compatible model when a pinned one is unavailable on your plan. If the families collide it re-spawns once with an unused family, and otherwise logs `model diversity unavailable` and proceeds.
 
-**Model IDs.** The pinned IDs (`claude-opus-5-5`, `gpt-5.5`, `gemini-3.1-pro`) are best guesses at each family's strongest general model. Check them against your model picker and edit the `model:` line in `cursor/agents/reviewer-*.md` — the comment in each file lists alternatives.
+**Model IDs.** The pinned IDs (`claude-opus-5-5-medium`, `gpt-5.6-sol-medium`, `gemini-4-argon-medium`, `grok-4.7-high-fast`, `muse-wonder-1.0-high`) follow Cursor's `<base>-<effort>[-fast]` convention. Confirm them with `agent --list-models` in the Cursor CLI (or Settings → Models) and edit the `model:` line in `cursor/agents/reviewer-*.md` — the comment in each file lists alternatives. If a pinned model is not on your plan, Cursor substitutes silently; the `Reviewer model:` line in each report tells you whether the pin held.
 
 ## Review scopes
 
@@ -408,7 +419,9 @@ plan-build-review/                                          # repo root = market
 │       │   └── agents/
 │       │       ├── reviewer-anthropic.md                   # Cursor reviewer roster, one per model family
 │       │       ├── reviewer-openai.md                      #   (read-only, model pinned in frontmatter;
-│       │       └── reviewer-google.md                      #    invisible to Claude Code)
+│       │       ├── reviewer-google.md                      #    invisible to Claude Code)
+│       │       ├── reviewer-xai.md
+│       │       └── reviewer-meta.md
 │       └── skills/
 │           └── plan-build-review/
 │               ├── SKILL.md                                # main workflow (shared by both harnesses)

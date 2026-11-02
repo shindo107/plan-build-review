@@ -163,8 +163,8 @@ Two reviewers, two lenses (**architecture** and **correctness**), always **in a 
 
 **Cursor** (roster — full rules in `references/harness-adapters.md`):
 
-- The plugin ships read-only subagents `reviewer-anthropic`, `reviewer-openai`, `reviewer-google`, each pinned to one model family. Exclude the implementer's family (from T4; "other"/unknown excludes nothing); pick two different remaining families; architecture lens to the first, correctness lens to the second; spawn both with `Task` in one message.
-- Each report must start with `Reviewer model: …`. If the two families match, or either matches the implementer, re-spawn that lens **once** — but only if an unused roster member exists whose family is neither the implementer's nor one already reported (with a 3-member roster that is only possible when the implementer is "other"). Otherwise, or if it still collides, log `model diversity unavailable: <lens> reported <family>` and continue with the findings you have.
+- The plugin ships read-only subagents `reviewer-anthropic`, `reviewer-openai`, `reviewer-google`, `reviewer-xai`, `reviewer-meta`, each pinned to one model family. Exclude the implementer's family (from T4; "other"/unknown excludes nothing); pick two different remaining families; architecture lens to the first, correctness lens to the second; spawn both with `Task` in one message.
+- Each report must start with `Reviewer model: …`. If the two families match, or either matches the implementer, re-spawn that lens **once** — but only if an unused roster member exists whose family is neither the implementer's nor one already reported. Otherwise, or if it still collides, log `model diversity unavailable: <lens> reported <family>` and continue with the findings you have.
 - Partial or missing roster (skill-only symlink install): use whatever non-implementer members exist, fill the rest with plain `Task` subagents carrying the lens templates, and log `model diversity unavailable: roster agents not installed`.
 
 **Substitute placeholders explicitly** before passing the template to the subagent prompt:

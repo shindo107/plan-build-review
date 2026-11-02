@@ -1,10 +1,11 @@
 ---
 name: reviewer-google
 description: Read-only adversarial code reviewer pinned to the Google model family. Spawned by the plan-build-review skill in Phase 6c with an explicit lens (architecture or correctness). Not for proactive use.
-# Verify this ID in Cursor's model picker (Settings → Models) and edit if it differs.
+# Verify this ID with `agent --list-models` in the Cursor CLI (or Settings → Models) and edit if it differs.
+# Convention: <base>-<effort>[-fast], e.g. gpt-5.5-medium, claude-opus-5-5-fast, grok-4.7-high-fast.
 # Cursor silently falls back to a compatible model when the pinned one is unavailable on your plan.
-# Other Google options: gemini-3-pro, gemini-3.8-flash
-model: gemini-3.1-pro
+# Other Google options: gemini-4-argon-high, gemini-3.1-pro
+model: gemini-4-argon-medium
 readonly: true
 is_background: false
 ---

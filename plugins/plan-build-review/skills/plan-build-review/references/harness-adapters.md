@@ -32,28 +32,30 @@ If neither set of signals matches, use the Cursor column (it assumes the least).
 
 ## Cursor reviewer roster
 
-The plugin ships three read-only reviewer subagents under `cursor/agents/`, one per model family, each pinned via `model:` frontmatter:
+The plugin ships five read-only reviewer subagents under `cursor/agents/`, one per model family, each pinned via `model:` frontmatter. IDs follow Cursor's `<base>-<effort>[-fast]` convention; confirm them with `agent --list-models` in the Cursor CLI (or Settings → Models) and edit the `model:` line if your account's catalog differs. A family whose model your plan lacks simply falls back silently, which the `Reviewer model:` check catches.
 
-| Subagent | Family | Pinned model (edit to match your model picker) |
+| Subagent | Family | Pinned model |
 |---|---|---|
-| `reviewer-anthropic` | Anthropic | `claude-opus-5-5` |
-| `reviewer-openai` | OpenAI | `gpt-5.5` |
-| `reviewer-google` | Google | `gemini-3.1-pro` |
+| `reviewer-anthropic` | Anthropic | `claude-opus-5-5-medium` |
+| `reviewer-openai` | OpenAI | `gpt-5.6-sol-medium` |
+| `reviewer-google` | Google | `gemini-4-argon-medium` |
+| `reviewer-xai` | xAI | `grok-4.7-high-fast` |
+| `reviewer-meta` | Meta | `muse-wonder-1.0-high` |
 
 They are only present when the plugin was installed through a Cursor marketplace (or the files were copied/symlinked into `~/.cursor/agents/`). A symlink install of the skill alone (`~/.claude/skills/`) does **not** carry them.
 
 ### Selection rule (Phase 6c, Cursor only)
 
 1. **Implementer family.** In T4 (Phase 2) ask one extra question: "Which model family is this chat running on?" with options Anthropic / OpenAI / Google / "Auto or not sure — use the agent's self-report" / other. Put your own self-identified family first as the recommended option. That family wrote the code and is excluded from reviewing it. **"Other" or unknown excludes nothing**: skip the implementer comparison in step 4, still require the two reviewers to differ, and log `implementer exclusion not possible: family unknown`.
-2. **Pick two.** From the roster minus the implementer's family, take two different families. Give the **architecture** lens to the first and the **correctness** lens to the second. **Partial roster** (some `reviewer-*` files missing): use the available non-implementer members and fill the remaining lens with a plain `Task` subagent (`model: inherit`), logging the reduced diversity.
+2. **Pick two.** From the roster minus the implementer's family, take two different families, preferring the ones the user has confirmed are on their plan (order of preference when unknown: Anthropic, OpenAI, Google, xAI, Meta). Give the **architecture** lens to the first and the **correctness** lens to the second. **Partial roster** (some `reviewer-*` files missing): use the available non-implementer members and fill the remaining lens with a plain `Task` subagent (`model: inherit`), logging the reduced diversity.
 3. **Spawn both in one message** (two `Task` calls) with the templates from `adversarial-pair.md`, substituting `<path>`, `<scope list>`, `<paste diff here>`, `<base-sha>`, `<repo>` and `<lens>`.
 4. **Check line 1.** Each report starts with `Reviewer model: …`. Cursor silently substitutes a compatible model when a pinned one is unavailable on the plan, so the line is the only signal. A collision is: both reports name the same family, or either names the implementer's family.
-5. **Re-spawn at most once, and only when it can help.** Re-spawn the offending lens only if an **unused** roster member exists whose family is neither the implementer's nor one already reported. With the 3-member roster and a known implementer family, both non-implementer members are already in use, so there is no such member — go straight to step 6. The re-spawn is reachable when the implementer is "other"/unknown (three candidates, two in use) or when the roster has been extended with a fourth family.
+5. **Re-spawn at most once, and only when it can help.** Re-spawn the offending lens only if an **unused** roster member exists whose family is neither the implementer's nor one already reported. With the 5-member roster and a known implementer family there are two spares; prefer the one whose family the user said is available on their plan. If no such member exists (partial roster), go straight to step 6.
 6. **Bounded.** On any collision you cannot repair, log `model diversity unavailable: <lens> reported <family>` and continue with the findings you have. Never loop, never spawn a third full review.
 
 ### Fallback when no roster subagents exist
 
-If `reviewer-anthropic` / `reviewer-openai` / `reviewer-google` are not available as `Task` targets, spawn two plain `Task` subagents (`model: inherit`) with the two lens templates, and log `model diversity unavailable: roster agents not installed`. The adversarial framing is preserved; only the family split is lost.
+If none of the `reviewer-*` roster subagents are available as `Task` targets, spawn two plain `Task` subagents (`model: inherit`) with the two lens templates, and log `model diversity unavailable: roster agents not installed`. The adversarial framing is preserved; only the family split is lost.
 
 ## Things that are intentionally the same in both harnesses
 
