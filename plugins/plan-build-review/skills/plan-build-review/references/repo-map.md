@@ -1,6 +1,6 @@
 # Repo map: format, freshness, and usage
 
-An optional pre-computed index of the target repo, cached at `.claude/repo-map.md`. When fresh, Phase 3 Explore agents receive it as shared context and spend their budget confirming patterns + finding usages instead of re-discovering file structure from scratch.
+An optional pre-computed index of the target repo, cached at `.claude/repo-map.md` (same path in Cursor, which reads `.claude/` directories for compatibility). When fresh, Phase 3 Explore agents receive it as shared context and spend their budget confirming patterns + finding usages instead of re-discovering file structure from scratch.
 
 Opt-in: users generate and refresh it manually via `scripts/generate-repo-map.sh`. The skill never generates or modifies the map automatically — that's the user's call.
 
@@ -73,8 +73,11 @@ Run the helper from **the target repo's root** (not the skill repo's root — th
 # Local-dev install:
 bash ~/ai-tools/plan-build-review/plugins/plan-build-review/skills/plan-build-review/scripts/generate-repo-map.sh
 
-# Marketplace install (path under ~/.claude/plugins/ — exact path depends on your install):
+# Claude Code marketplace install (path under ~/.claude/plugins/ — exact path depends on your install):
 bash ~/.claude/plugins/<plugin-install-path>/skills/plan-build-review/scripts/generate-repo-map.sh
+
+# Cursor plugin install (path under ~/.cursor/ — find it with: find ~/.cursor -name generate-repo-map.sh):
+bash ~/.cursor/<plugin-install-path>/skills/plan-build-review/scripts/generate-repo-map.sh
 ```
 
 The script is idempotent: running it twice in a row with no intervening source changes produces the same file (same SHA header, same signatures).

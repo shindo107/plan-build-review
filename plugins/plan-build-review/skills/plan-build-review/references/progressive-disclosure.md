@@ -12,7 +12,7 @@ Tiers are cumulative, not optional. Tier 1 is always asked. Tier 4 (review confi
 
 **Goal**: pin down the outcome so the plan has a clear target.
 
-Example `AskUserQuestion` frame (one question, 2–4 options tailored to the task):
+Example question frame (*ask the user* — see `harness-adapters.md`; one question, 2–4 options tailored to the task):
 
 > "What does done look like for this task?"
 > - The observable outcome (user-visible change)
@@ -36,7 +36,7 @@ Record the answer. "Match the existing page" is a standing constraint for the Ph
 
 **Ask if**: T1 didn't make clear which files/modules are affected, or if there are multiple plausible surfaces to touch.
 
-**Placeholder substitution**: the examples below use `<specific area 1>`, `<specific area 2>`, etc. as placeholders. **You must substitute** these with concrete file/module names drawn from the user's prompt and any quick-glance exploration you've done. Never pass literal `<...>` tokens to `AskUserQuestion` — the user will see confusing angle-bracket text.
+**Placeholder substitution**: the examples below use `<specific area 1>`, `<specific area 2>`, etc. as placeholders. **You must substitute** these with concrete file/module names drawn from the user's prompt and any quick-glance exploration you've done. Never pass literal `<...>` tokens to the question tool — the user will see confusing angle-bracket text.
 
 Example questions:
 
@@ -80,8 +80,10 @@ Do **not** ask all T3 questions by default. Only ask the subset that the task ac
 > - Iterate until clean, max 2 rounds — more thorough, ~2× review cost
 > - User decides after first review — max control, interactive
 
-Store the answer; the reviewer-scope picker itself happens in **Phase 6b** (after exploration), not here, because dynamic scope suggestions depend on what the diff actually touches.
+**Cursor only**: in the same T4 call, also ask "Which model family is this chat running on?" with options Anthropic / OpenAI / Google / "Auto or not sure — use the agent's self-report" / other, putting your own self-identified family first as the recommended answer — the Phase 6c roster rule excludes that family from reviewing its own code; "other" excludes nothing (see `harness-adapters.md`).
+
+Store the answers; the reviewer-scope picker itself happens in **Phase 6b** (after exploration), not here, because dynamic scope suggestions depend on what the diff actually touches.
 
 ## Meta-rule
 
-If you find yourself asking more than 3 `AskUserQuestion` calls in a row in the clarification phase, stop and ask yourself: "Is the user trying to tell me this task is simple and I'm over-asking?" Err on the side of proceeding to exploration with reasonable assumptions that you'll surface in the plan for approval.
+If you find yourself asking more than 3 question rounds in a row in the clarification phase, stop and ask yourself: "Is the user trying to tell me this task is simple and I'm over-asking?" Err on the side of proceeding to exploration with reasonable assumptions that you'll surface in the plan for approval.

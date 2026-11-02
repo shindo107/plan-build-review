@@ -1,13 +1,17 @@
 # Adversarial review pair: briefing templates
 
-Two reviewers, spawned **in parallel in a single message** (two `Agent` tool calls in one response — not serially).
+<!-- Keep the severity rubric and findings format in sync with the three Cursor roster bodies in ../../../cursor/agents/reviewer-*.md -->
 
-- **Opus reviewer**: `subagent_type: general-purpose`, `model: opus`. Skeptical senior reviewer. Optimized for finding architectural and critical-thinking issues that won't show up in a test run.
-- **Sonnet reviewer**: `subagent_type: general-purpose`, `model: sonnet`. Careful correctness reviewer. Optimized for finding bugs, spec violations, regressions, and edge cases.
+Two reviewers with two lenses, spawned **in parallel in a single message** (two subagent calls in one response — not serially).
 
-Each receives: the diff, the plan file path, their assigned scopes, the severity rubric, and the required findings format below.
+- **Architecture reviewer** — skeptical senior reviewer. Optimized for finding architectural and critical-thinking issues that won't show up in a test run. Claude Code: `Agent`, `subagent_type: general-purpose`, `model: opus`.
+- **Correctness reviewer** — careful correctness reviewer. Optimized for finding bugs, spec violations, regressions, and edge cases. Claude Code: `Agent`, `subagent_type: general-purpose`, `model: sonnet`.
 
-**Placeholder substitution is required**. Both templates below contain `<path>`, `<scope list>`, and `<paste diff here>` placeholders. Before you pass either template to a subagent's `prompt` field, substitute all three with concrete values. If the diff is large (>2000 lines), write it to a temp file (`/tmp/plan-build-review-diff-<timestamp>.patch`) and replace `<paste diff here>` with `See /tmp/plan-build-review-diff-<ts>.patch — read it with the Read tool.`
+**Cursor**: the same two templates go to two roster subagents (`reviewer-anthropic` / `reviewer-openai` / `reviewer-google`) chosen so that the two reviewers come from different model families and neither is the family that wrote the code. Selection and collision rules live in `harness-adapters.md`. The roster agents carry this rubric and findings format in their own definition, so the template is the only thing the spawn prompt needs.
+
+Each receives: the diff, the plan file path, the base SHA, their lens, their assigned scopes, the severity rubric, and the required findings format below.
+
+**Placeholder substitution is required**. Both templates below contain `<path>`, `<scope list>`, `<paste diff here>`, `<base-sha>`, `<repo>` and `<lens>` placeholders. Before you pass either template to a subagent's `prompt` field, substitute all of them with concrete values. If the diff is large (>2000 lines), write it to a temp file (`/tmp/plan-build-review-diff-<timestamp>.patch`) and replace `<paste diff here>` with `See /tmp/plan-build-review-diff-<ts>.patch — read it with the Read tool.`
 
 ## Severity rubric (both reviewers use this)
 
@@ -42,15 +46,18 @@ Example:
 
 **Rank, don't pile.** Finding something is not the goal — finding what matters is. Before you return, re-read your list and ask of every `medium` and `nit`: would fixing this add abstraction or a test for a case that cannot happen? If so, drop it or demote it. Cap `nit` findings at 5.
 
-At the top of the response, include a 1-line summary: `Overall: <N> blockers, <N> highs, <N> mediums, <N> nits.` If no findings, write `Overall: clean.`
+The first line of the response is `Reviewer model: <the model you actually are, family first>` — in Cursor this is how the main thread confirms the two reviewers came from different families (pinned models fall back silently); in Claude Code it is informational. The second line is the summary: `Overall: <N> blockers, <N> highs, <N> mediums, <N> nits.` If no findings, write `Overall: clean.`
 
-## Opus reviewer — prompt template
+## Architecture reviewer — prompt template (Claude Code: Opus)
 
 ```
-You are the Opus reviewer in a adversarial review pair. Your partner is running in parallel with different framing; your job is the **skeptical architectural review**.
+You are the architecture reviewer in an adversarial review pair. Your partner is running in parallel on a different model with different framing; your job is the **skeptical architectural review**.
 
 ## Context
 - Plan file: <path>
+- Lens: <lens>
+- Repo: <repo> (absolute path of the repo or worktree under review — your working directory may differ)
+- Base SHA: <base-sha> (if you cannot read the diff below or the patch file it names, regenerate it with `git -C <repo> diff <base-sha>..HEAD` plus `git -C <repo> diff HEAD`)
 - Diff: see below (from `git diff <base>..HEAD`)
 - Assigned scopes: <comma-separated scopes>
 - Screenshots (UI tasks only, may be absent): before = <before-dir>, after = <after-dir>, visual target = <target or "none">. If present, open them with the Read tool and review the rendered result as well as the diff.
@@ -75,19 +82,22 @@ You are the experienced senior engineer who has seen this pattern go wrong befor
 Only flag findings that fall within: <scope list>. If you notice something outside scope that's serious, note it in a single final "Out of scope but worth mentioning" section (max 3 items).
 
 ## Output
-Follow the findings format in references/adversarial-pair.md. Start with the 1-line Overall summary.
+Follow the findings format in references/adversarial-pair.md. Line 1: `Reviewer model: <your model, family first>`. Line 2: the Overall summary.
 
 ## Diff
 <paste diff here>
 ```
 
-## Sonnet reviewer — prompt template
+## Correctness reviewer — prompt template (Claude Code: Sonnet)
 
 ```
-You are the Sonnet reviewer in a adversarial review pair. Your partner is running in parallel with different framing; your job is the **rigorous correctness review**.
+You are the correctness reviewer in an adversarial review pair. Your partner is running in parallel on a different model with different framing; your job is the **rigorous correctness review**.
 
 ## Context
 - Plan file: <path>
+- Lens: <lens>
+- Repo: <repo> (absolute path of the repo or worktree under review — your working directory may differ)
+- Base SHA: <base-sha> (if you cannot read the diff below or the patch file it names, regenerate it with `git -C <repo> diff <base-sha>..HEAD` plus `git -C <repo> diff HEAD`)
 - Diff: see below (from `git diff <base>..HEAD`)
 - Assigned scopes: <comma-separated scopes>
 - Screenshots (UI tasks only, may be absent): before = <before-dir>, after = <after-dir>, visual target = <target or "none">. If present, open them with the Read tool: anything that moved, changed colour, or lost its dimmed state **outside the named change** is a `high` regression.
@@ -111,7 +121,7 @@ You are the careful engineer who checks every path. You find the bugs, the misse
 Only flag findings that fall within: <scope list>. If you notice something outside scope that's serious, note it in a single final "Out of scope but worth mentioning" section (max 3 items).
 
 ## Output
-Follow the findings format in references/adversarial-pair.md. Start with the 1-line Overall summary.
+Follow the findings format in references/adversarial-pair.md. Line 1: `Reviewer model: <your model, family first>`. Line 2: the Overall summary.
 
 ## Diff
 <paste diff here>

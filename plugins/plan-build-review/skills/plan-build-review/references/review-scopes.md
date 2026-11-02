@@ -65,11 +65,11 @@ Frame them as a recommendation, not a requirement:
 
 Let the user accept or skip per suggestion.
 
-## Note on the `AskUserQuestion` 4-option cap
+## Note on the 4-option cap (Claude Code)
 
-`AskUserQuestion` caps each call at 4 options. The 4 baseline scopes alone equal the cap, so any time you add a dynamic scope suggestion **you must split into two `AskUserQuestion` calls per reviewer**:
+Claude Code's `AskUserQuestion` caps each call at 4 options. (Cursor's question tool has no such cap — one call per reviewer is fine there, but keep the same baseline-then-dynamic order.) The 4 baseline scopes alone equal the cap, so any time you add a dynamic scope suggestion **you must split into two question calls per reviewer**:
 
 1. First call: present the 4 baseline scopes (multi-select).
 2. Second call: present the 1–2 dynamic scope suggestions plus a "None, proceed" option.
 
-Total per reviewer: up to 2 `AskUserQuestion` calls. For both reviewers: up to 4 calls. This is expected; do not try to cram options into a single call.
+Total per reviewer: up to 2 question calls. For both reviewers: up to 4 calls. This is expected; do not try to cram options into a single call.

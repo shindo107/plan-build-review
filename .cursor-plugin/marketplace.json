@@ -1,0 +1,21 @@
+{
+  "name": "tabor-labs",
+  "owner": {
+    "name": "Darren Podolak"
+  },
+  "metadata": {
+    "description": "Tabor Labs agent workflow plugins: plan → build → adversarial review, usable from Claude Code and Cursor.",
+    "version": "1.3.0"
+  },
+  "plugins": [
+    {
+      "name": "plan-build-review",
+      "source": "./plugins/plan-build-review",
+      "description": "Think→plan→do→review workflow skill with a cross-model-family adversarial review pair and optional git worktree / deploy finishing.",
+      "category": "workflow",
+      "author": {
+        "name": "Darren Podolak"
+      }
+    }
+  ]
+}

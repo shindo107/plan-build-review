@@ -1,0 +1,13 @@
+{
+  "name": "plan-build-review",
+  "description": "Rigorous think→plan→do→review workflow with progressive clarification, test-first bug fixes, parallel subagent exploration, an adversarial review pair drawn from two different model families, and optional commit/push/deploy/worktree finishing.",
+  "version": "1.3.0",
+  "author": {
+    "name": "Darren Podolak"
+  },
+  "homepage": "https://github.com/shindo107/plan-build-review",
+  "repository": "https://github.com/shindo107/plan-build-review",
+  "license": "MIT",
+  "keywords": ["workflow", "planning", "code-review", "adversarial-review", "subagents"],
+  "agents": "cursor/agents"
+}

@@ -1,10 +1,10 @@
 # plan-build-review
 
-> A Claude Code skill that wraps a rigorous **plan → build → review** workflow around any implementation task. Replaces the "paste the same planning prompt every time" pattern with one command.
+> A Claude Code **and Cursor** skill that wraps a rigorous **plan → build → review** workflow around any implementation task. Replaces the "paste the same planning prompt every time" pattern with one command.
 
-Rigorous plan→build→review workflow. Progressive clarification, test-first bug fixes, parallel subagent exploration, adversarial Opus+Sonnet review with user-selected scopes and per-finding confidence, then commit/push/deploy/worktree finishing.
+Rigorous plan→build→review workflow. Progressive clarification, test-first bug fixes, parallel subagent exploration, adversarial two-reviewer review (Opus+Sonnet in Claude Code; two different model families in Cursor) with user-selected scopes and per-finding confidence, then commit/push/deploy/worktree finishing.
 
-**New in 1.2.0** — see [What changed in 1.2.0](#what-changed-in-120).
+**New in 1.3.0** — Cursor support with a cross-family reviewer roster. See [What changed in 1.3.0](#what-changed-in-130).
 
 ---
 
@@ -15,10 +15,12 @@ Rigorous plan→build→review workflow. Progressive clarification, test-first b
 - [Quick start](#quick-start)
 - [Install](#install)
 - [Invocation & arguments](#invocation--arguments)
+- [What changed in 1.3.0](#what-changed-in-130)
 - [What changed in 1.2.0](#what-changed-in-120)
 - [Workflow walkthrough](#workflow-walkthrough)
 - [Progressive disclosure: the clarification tiers](#progressive-disclosure-the-clarification-tiers)
 - [The adversarial review pair](#the-adversarial-review-pair)
+- [Running in Cursor](#running-in-cursor)
 - [Review scopes](#review-scopes)
 - [Review-loop termination strategies](#review-loop-termination-strategies)
 - [Estimating token cost](#estimating-token-cost)
@@ -95,6 +97,15 @@ ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/skills/plan-build-r
 
 Invoke as `/plan-build-review`. Edits to files in `~/ai-tools/plan-build-review/` take effect immediately — no reinstall or restart.
 
+### In Cursor
+
+The repo is also a Cursor plugin marketplace (`.cursor-plugin/marketplace.json`). Two options:
+
+1. **Plugin install (recommended — includes the reviewer roster).** Cursor → Customize → *From GitHub Repository* → `https://github.com/shindo107/plan-build-review` → install `plan-build-review`. Team admins can instead add it under Dashboard → Plugins & MCPs → *Add Marketplace* → *Import from Repo*. This installs the skill **and** the three `reviewer-*` subagents.
+2. **Symlink install (skill only).** Cursor reads `~/.claude/skills/` for compatibility, so the local-dev symlink above already exposes `/plan-build-review` in Cursor. The reviewer roster is not included; the skill falls back to two plain subagents and logs `model diversity unavailable`. To get the roster without the plugin: `mkdir -p ~/.cursor/agents && ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/cursor/agents/*.md ~/.cursor/agents/`.
+
+Invoke as `/plan-build-review` followed by the arguments in the same message, e.g. `/plan-build-review push worktree`. See [Running in Cursor](#running-in-cursor) for what differs.
+
 ## Invocation & arguments
 
 `/plan-build-review [commit|push|deploy] [worktree]`
@@ -121,6 +132,17 @@ All args are position-insensitive and case-insensitive. A git-action token and t
 | `/plan-build-review push worktree` | Worktree + push; then prompt-to-merge |
 | `/plan-build-review deploy worktree` | Worktree + full deploy pipeline; then prompt-to-merge |
 
+## What changed in 1.3.0
+
+The skill now runs in Cursor as well as Claude Code, from the same repo and the same `SKILL.md`.
+
+| Change | Why |
+|---|---|
+| **Cursor plugin manifests** (`.cursor-plugin/marketplace.json`, `plugins/plan-build-review/.cursor-plugin/plugin.json`) | Cursor's plugin layout mirrors Claude Code's (`plugins/<name>/` + default `skills/` discovery), so one repo serves both marketplaces with no file moves. |
+| **Harness-neutral `SKILL.md` + `references/harness-adapters.md`** | Phase logic is identical in both harnesses; only the primitives differ (plan mode, question tool, subagent spawn, worktrees). Each *italic verb* in the skill resolves through one adapter table. The Claude Code path is unchanged. |
+| **Cross-family reviewer roster for Cursor** (`plugins/plan-build-review/cursor/agents/reviewer-{anthropic,openai,google}.md`) | Cursor subagents pin a model via frontmatter. The skill picks two roster reviewers from two different families, never the family that wrote the code, and checks each report's `Reviewer model:` line because Cursor substitutes models silently. |
+| **`Reviewer model:` line 1 + `Base SHA:` / `Lens:` context in both templates** | Lets the main thread verify model diversity, and lets a read-only reviewer regenerate the diff if it cannot open the patch file. |
+
 ## What changed in 1.2.0
 
 Driven by a month of logged runs against a production codebase and a comparison of the loop against published guidance (Anthropic's Claude Code best practices, Beck on TDD, research on LLM self-correction). The loop was already strong at asking and reviewing; these changes close the gaps on **proving** the work.
@@ -146,7 +168,7 @@ First thing the skill does: read `$ARGUMENTS`, identify which git-action mode yo
 
 ### Phase 1 — Enter plan mode
 
-Calls `EnterPlanMode`. From here until the plan is approved, the skill is read-only. Records the plan file path from plan mode's system reminder for later phases.
+Enters plan mode (Claude Code: `EnterPlanMode`; Cursor: asks you to toggle Plan mode, since the agent cannot). From here until the plan is approved, the skill is read-only. Records the plan file path for later phases.
 
 ### Phase 2 — Progressive-disclosure clarification
 
@@ -154,7 +176,7 @@ Asks one tier of questions at a time, only descending when prior-tier answers le
 
 ### Phase 2.5 — Worktree setup (conditional)
 
-Runs only if you used the `worktree` arg. Happens after Tier-1 intent clarification so the branch slug can be derived from a confirmed task description instead of invented from a possibly-vague one-liner. Uses the `EnterWorktree` tool (not raw `cd`) so working-directory context persists across tool calls.
+Runs only if you used the `worktree` arg. Happens after Tier-1 intent clarification so the branch slug can be derived from a confirmed task description instead of invented from a possibly-vague one-liner. Uses the `EnterWorktree` tool in Claude Code (not raw `cd`) so working-directory context persists across tool calls; in Cursor it asks you to restart the task with `/worktree`.
 
 ### Phase 3 — Explore in parallel
 
@@ -170,7 +192,7 @@ Runs after plan approval, before implementation starts. Four steps: (a) dirty-tr
 
 ### Phase 5 — Implement
 
-Breaks the plan into discrete tracked tasks. Delegates independent work to general-purpose subagents in parallel where that actually saves wall time (not for trivial edits — handoff has overhead). **Implementation subagents run on Sonnet by default**; the main thread only escalates an individual subagent to Opus when architectural judgment is required that the Phase 6c Opus reviewer would otherwise have to repair. Three rules govern the phase. **Test-first** (default for bug fixes, opt-in otherwise): write one failing test, show the failure, then implement without touching the test. **Test integrity** (always): no test is deleted, skipped, loosened or rewritten to get to green. **Scratch files** (always): logs, diffs and screenshots go to the scratchpad or `/tmp`, never the repo tree. After each task, the skill runs the project's lint **and** typecheck — each resolved separately via `CLAUDE.md` → `package.json` scripts (`lint`; `typecheck`/`tsc`/`type-check`) → tooling binary on `PATH` (falling back to `npx tsc --noEmit` when a `tsconfig.json` exists) — and fixes violations before marking the task complete.
+Breaks the plan into discrete tracked tasks. Delegates independent work to general-purpose subagents in parallel where that actually saves wall time (not for trivial edits — handoff has overhead). **Implementation subagents run on Sonnet by default**; the main thread only escalates an individual subagent to Opus when architectural judgment is required that the Phase 6c architecture reviewer would otherwise have to repair. Three rules govern the phase. **Test-first** (default for bug fixes, opt-in otherwise): write one failing test, show the failure, then implement without touching the test. **Test integrity** (always): no test is deleted, skipped, loosened or rewritten to get to green. **Scratch files** (always): logs, diffs and screenshots go to the scratchpad or `/tmp`, never the repo tree. After each task, the skill runs the project's lint **and** typecheck — each resolved separately via `CLAUDE.md` → `package.json` scripts (`lint`; `typecheck`/`tsc`/`type-check`) → tooling binary on `PATH` (falling back to `npx tsc --noEmit` when a `tsconfig.json` exists) — and fixes violations before marking the task complete.
 
 ### Phase 6 — Adversarial review
 
@@ -178,7 +200,7 @@ The core differentiator. Three sub-steps:
 
 - **6a.** Establishes the diff against the correct base (worktree → `git diff main...HEAD`; in-place-with-commits → against recorded base SHA; in-place-with-nothing-committed → `git diff HEAD`). Large diffs go to a temp file rather than being inlined in the prompt. For UI tasks with before-screenshots from Phase 4.5, captures matching **after** screenshots and hands both sets (plus the user's visual target) to the reviewers.
 - **6b.** Synthesizes 1–2 dynamic scope suggestions specific to what the diff actually touches, then asks you to assign scopes per reviewer (multi-select).
-- **6c.** Spawns both reviewers in parallel in a single message: one `general-purpose` agent with `model: opus`, one with `model: sonnet`. Each gets the diff, the plan path, their assigned scopes, and the severity rubric.
+- **6c.** Spawns both reviewers in parallel in a single message. Claude Code: one `general-purpose` agent with `model: opus` (architecture lens), one with `model: sonnet` (correctness lens). Cursor: two roster subagents from two different model families, excluding the family that wrote the code. Each gets the diff, the plan path, the base SHA, their lens, their assigned scopes, and the severity rubric.
 
 ### Phase 7 — Synthesize findings and apply fixes
 
@@ -221,14 +243,14 @@ Rule: descend only when the prior tier leaves a load-bearing decision ambiguous.
 
 Two reviewers, spawned in parallel in a single message, running on different models with different framing:
 
-**Opus reviewer** (`model: opus`) — the skeptical architectural lens. Looks for:
+**Architecture reviewer** (Claude Code: `model: opus`) — the skeptical architectural lens. Looks for:
 - Hidden coupling across the codebase
 - Abstraction mismatches that will collapse under the next reasonable feature
 - Over- or under-engineering
 - Invariants that this change silently violates
 - Blast radius larger than the diff implies
 
-**Sonnet reviewer** (`model: sonnet`) — the rigorous correctness lens. Looks for:
+**Correctness reviewer** (Claude Code: `model: sonnet`) — the rigorous correctness lens. Looks for:
 - Spec match against the approved plan
 - Edge cases: empty inputs, boundary values, concurrent calls, error paths
 - Regression risk on existing callers' contracts
@@ -237,7 +259,25 @@ Two reviewers, spawned in parallel in a single message, running on different mod
 
 Both follow the same severity rubric (`blocker` / `high` / `medium` / `nit`) and return findings in a structured `severity / file:line / issue / why / scenario / confidence / fix` format so the main thread can merge deterministically. **Scenario** is the concrete input or state that triggers the issue — what a test would set up. **Confidence** (`high` / `medium` / `low`) is mandatory and honest: `high` means the reviewer read the surrounding code and the scenario is reachable; `low` means a pattern match it couldn't confirm. Reviewers are told to rank rather than pile — a `medium` that would add abstraction for an unreachable case gets dropped, and nits are capped at 5. When both reviewers flag the same issue, that's a strong signal. When they disagree, the one with a citable file:line and concrete fix wins. For UI tasks, both reviewers also receive before/after screenshots and the user's visual target, and anything that moved outside the named change is a `high`.
 
+Every report starts with a `Reviewer model:` line stating which model actually produced it.
+
 If your Claude Code version doesn't support per-invocation model overrides on the `Agent` tool, the skill degrades gracefully: both reviewers run on the default model, adversarial framing preserved, model diversity logged as unavailable.
+
+## Running in Cursor
+
+Same phases, same questions, same review format. What differs is listed in `references/harness-adapters.md`; the short version:
+
+| Primitive | Claude Code | Cursor |
+|---|---|---|
+| Arguments | `$ARGUMENTS` substitution | The words after `/plan-build-review` in your message |
+| Plan mode | `EnterPlanMode` / `ExitPlanMode` | You toggle Plan mode (Shift+Tab); the skill writes `~/.cursor/plans/<slug>.md` and waits for an explicit "approved" |
+| Clarifying questions | `AskUserQuestion` (4-option cap) | Cursor's question tool, or an inline numbered question |
+| Reviewers | `general-purpose` + `model: opus` / `model: sonnet` | Two of `reviewer-anthropic`, `reviewer-openai`, `reviewer-google` |
+| Worktree | `EnterWorktree` / `ExitWorktree` | You run `/worktree`, then `/apply-worktree` or `/delete-worktree` |
+
+**Model-family selection.** Cursor subagents pin a model in frontmatter and cannot be re-pointed at runtime, so the plugin ships one read-only reviewer per family. In T4 the skill asks which family your chat is running on; that family wrote the code and is excluded. It then spawns two reviewers from two other families (architecture lens first, correctness second) and reads the `Reviewer model:` line of each report, because Cursor silently substitutes a compatible model when a pinned one is unavailable on your plan. If the families collide it re-spawns once — only when an unused family is actually available, which with three roster files means only when your chat family was "other" — and otherwise logs `model diversity unavailable` and proceeds. Add a fourth roster file (see [Extending](#extending--customizing)) if you want a spare.
+
+**Model IDs.** The pinned IDs (`claude-opus-5-5`, `gpt-5.5`, `gemini-3.1-pro`) are best guesses at each family's strongest general model. Check them against your model picker and edit the `model:` line in `cursor/agents/reviewer-*.md` — the comment in each file lists alternatives.
 
 ## Review scopes
 
@@ -353,17 +393,27 @@ Full format spec and freshness policy: [`references/repo-map.md`](./plugins/plan
 ## Repo layout
 
 ```
-plan-build-review/                                          # repo root = marketplace
+plan-build-review/                                          # repo root = marketplace (both harnesses)
 ├── .claude-plugin/
-│   └── marketplace.json                                    # lists the plugin
+│   └── marketplace.json                                    # Claude Code marketplace
+├── .cursor-plugin/
+│   └── marketplace.json                                    # Cursor marketplace
 ├── plugins/
 │   └── plan-build-review/                                  # plugin root
 │       ├── .claude-plugin/
-│       │   └── plugin.json                                 # plugin manifest
+│       │   └── plugin.json                                 # Claude Code plugin manifest
+│       ├── .cursor-plugin/
+│       │   └── plugin.json                                 # Cursor plugin manifest ("agents": "cursor/agents")
+│       ├── cursor/
+│       │   └── agents/
+│       │       ├── reviewer-anthropic.md                   # Cursor reviewer roster, one per model family
+│       │       ├── reviewer-openai.md                      #   (read-only, model pinned in frontmatter;
+│       │       └── reviewer-google.md                      #    invisible to Claude Code)
 │       └── skills/
 │           └── plan-build-review/
-│               ├── SKILL.md                                # main workflow
+│               ├── SKILL.md                                # main workflow (shared by both harnesses)
 │               ├── references/
+│               │   ├── harness-adapters.md                 # Claude Code ↔ Cursor primitive table + roster rules
 │               │   ├── progressive-disclosure.md           # clarification tier catalog
 │               │   ├── review-scopes.md                    # baseline scopes + dynamic triggers
 │               │   ├── adversarial-pair.md                 # reviewer briefing templates
@@ -375,16 +425,18 @@ plan-build-review/                                          # repo root = market
 └── .gitignore
 ```
 
-Architectural note: `SKILL.md` stays under ~300 lines so it loads quickly into context. Detailed content lives in `references/` and is read on-demand by Claude when the relevant phase needs it. This is progressive disclosure applied to the skill itself.
+Architectural note: `SKILL.md` stays under ~300 lines so it loads quickly into context. Detailed content lives in `references/` and is read on-demand by the agent when the relevant phase needs it. This is progressive disclosure applied to the skill itself.
 
 ## Requirements
 
-- **Claude Code** — any recent version. Some features depend on specific tools:
-  - `Agent` tool with `model` parameter support (for adversarial model diversity) — degrades gracefully if unavailable
-  - `EnterWorktree` / `ExitWorktree` tools (for worktree mode) — loaded via `ToolSearch` if deferred
-  - `EnterPlanMode` / `ExitPlanMode` (for plan-mode phases) — built-in in recent versions
-  - `AskUserQuestion` (for clarification phases) — built-in
-  - A task-tracking tool (`TaskCreate`/`TaskUpdate`/`TaskList` or equivalent) — used in Phase 5
+- **One of:**
+  - **Claude Code** — any recent version. Some features depend on specific tools:
+    - `Agent` tool with `model` parameter support (for adversarial model diversity) — degrades gracefully if unavailable
+    - `EnterWorktree` / `ExitWorktree` tools (for worktree mode) — loaded via `ToolSearch` if deferred
+    - `EnterPlanMode` / `ExitPlanMode` (for plan-mode phases) — built-in in recent versions
+    - `AskUserQuestion` (for clarification phases) — built-in
+    - A task-tracking tool (`TaskCreate`/`TaskUpdate`/`TaskList` or equivalent) — used in Phase 5
+  - **Cursor** — a version with Agent Skills, subagents (`agents/*.md` with a `model:` field) and plugin marketplaces. Model diversity needs the plugin install (for the roster) and a plan on which at least two of the pinned model families are available; otherwise reviewers fall back to the chat model and the skill says so.
 - **Git** — required for all git-action modes and for worktree lifecycle
 - **A deploy command** — only if you use the `deploy` arg (see [Deploy command resolution](#deploy-command-resolution))
 - **`bash` + `grep`** — only if you choose to run `scripts/generate-repo-map.sh` (standard on any POSIX system; no other runtime)
@@ -398,7 +450,14 @@ No other dependencies. The skill itself is pure markdown — no runtime, no npm 
 - Local dev install: verify the symlink with `ls -la ~/.claude/skills/plan-build-review` — it should resolve to the cloned repo's skill directory.
 
 **Adversarial review uses the same model for both reviewers**
-- Your Claude Code version may not support per-invocation `model` overrides on the `Agent` tool. The skill detects this and logs it. Functionality is preserved, only model diversity is lost.
+- Claude Code: your version may not support per-invocation `model` overrides on the `Agent` tool. The skill detects this and logs it. Functionality is preserved, only model diversity is lost.
+- Cursor: check the `Reviewer model:` line of each report. If both name the same family, either the roster subagents are not installed (symlink-only install — see [In Cursor](#in-cursor)) or your plan lacks the pinned models and Cursor fell back silently. Edit the `model:` line in `cursor/agents/reviewer-*.md` to IDs your picker shows.
+
+**Cursor: the skill shows a literal `$ARGUMENTS` or ignores my arguments**
+- Cursor does not substitute the placeholder; the skill reads the words after `/plan-build-review` in your message instead. Put the arguments in the same message as the slash command.
+
+**Cursor: the skill started editing before I approved the plan**
+- The agent cannot enter Plan mode itself. Toggle Plan mode (Shift+Tab) when the skill asks, or reply only with revision requests until you type "approved".
 
 **Worktree mode creates the worktree but subsequent phases run in the wrong directory**
 - This happens if the skill fell back to a raw `cd` instead of using the `EnterWorktree` tool. Make sure your Claude Code version has `EnterWorktree` available via `ToolSearch`.
@@ -417,9 +476,10 @@ No other dependencies. The skill itself is pure markdown — no runtime, no npm 
 Everything in `references/` is designed to be edited. Common customizations:
 
 - **Add a dynamic scope trigger**: edit `references/review-scopes.md`, add a row to the trigger table. The skill will pick it up on the next invocation.
-- **Tweak reviewer framing**: edit the Opus/Sonnet templates in `references/adversarial-pair.md`. Anything from wording changes to entirely new lenses (e.g., an "adversarial security" lens that asks pointedly about auth flows).
+- **Tweak reviewer framing**: edit the architecture/correctness templates in `references/adversarial-pair.md` (and, for Cursor, the roster bodies in `cursor/agents/`). Anything from wording changes to entirely new lenses (e.g., an "adversarial security" lens that asks pointedly about auth flows).
 - **Change the clarification tiers**: edit `references/progressive-disclosure.md`. Add a T2.5 for "performance budgets" or whatever dimension matters in your domain.
 - **Add a new arg**: edit `SKILL.md` Phase 0 arg table + the corresponding phase that should run. E.g., `tag` to auto-create a git tag after commit.
+- **Add a reviewer family for Cursor**: copy one of `cursor/agents/reviewer-*.md`, change `name`, `description` and `model`, and add the row to the roster table in `references/harness-adapters.md`.
 
 Keep `SKILL.md` itself thin — the goal is that Claude loads it quickly, sees the phase structure, and reads the relevant reference file only when that phase needs detail. Think of it as progressive disclosure for Claude itself.
 
