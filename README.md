@@ -104,16 +104,25 @@ The repo is also a Cursor plugin marketplace (`.cursor-plugin/marketplace.json`)
 1. **Plugin install (recommended — includes the reviewer roster).** Cursor → Customize → *From GitHub Repository* → `https://github.com/shindo107/plan-build-review` → install `plan-build-review`. Team admins can instead add it under Dashboard → Plugins & MCPs → *Add Marketplace* → *Import from Repo*. This installs the skill **and** the five `reviewer-*` subagents.
 2. **Symlink install (skill only).** Cursor reads `~/.claude/skills/` for compatibility, so the local-dev symlink above already exposes `/plan-build-review` in Cursor. The reviewer roster is not included; the skill falls back to two plain subagents and logs `model diversity unavailable`. To get the roster without the plugin: `mkdir -p ~/.cursor/agents && ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/cursor/agents/*.md ~/.cursor/agents/`.
 
-3. **Manual install (marketplace plugins disabled by an admin).** Cursor discovers skills and subagents from plain directories, so no plugin system is needed:
+3. **Manual install (marketplace plugins disabled by an admin).** Cursor discovers skills and subagents from plain directories, so no plugin system is needed. **Copy, don't symlink** — Cursor does not follow symlinks under `~/.cursor/skills` (open bug), so a linked skill never appears in Customize or the `/` menu:
 
    ```bash
    git clone https://github.com/shindo107/plan-build-review ~/ai-tools/plan-build-review
    mkdir -p ~/.cursor/skills ~/.cursor/agents
-   ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/skills/plan-build-review ~/.cursor/skills/plan-build-review
-   ln -s ~/ai-tools/plan-build-review/plugins/plan-build-review/cursor/agents/*.md ~/.cursor/agents/
+   cp -R ~/ai-tools/plan-build-review/plugins/plan-build-review/skills/plan-build-review ~/.cursor/skills/
+   cp ~/ai-tools/plan-build-review/plugins/plan-build-review/cursor/agents/*.md ~/.cursor/agents/
    ```
 
-   Restart Cursor. On Windows, copy the folders to `%USERPROFILE%\.cursor\skills\plan-build-review\` and `%USERPROFILE%\.cursor\agents\` instead of symlinking (re-copy after each `git pull`). For a per-project install that teammates get from the repo, use `.cursor/skills/` and `.cursor/agents/` inside the project.
+   Windows (PowerShell):
+
+   ```powershell
+   git clone https://github.com/shindo107/plan-build-review $HOME\ai-tools\plan-build-review
+   New-Item -ItemType Directory -Force $HOME\.cursor\skills, $HOME\.cursor\agents | Out-Null
+   Copy-Item -Recurse -Force $HOME\ai-tools\plan-build-review\plugins\plan-build-review\skills\plan-build-review $HOME\.cursor\skills\
+   Copy-Item -Force $HOME\ai-tools\plan-build-review\plugins\plan-build-review\cursor\agents\*.md $HOME\.cursor\agents\
+   ```
+
+   Restart Cursor, then check Cursor Settings → Rules, Skills and Subagents: `plan-build-review` should be listed under Skills and `reviewer-*` under Subagents. Re-run the copy after each `git pull`. For a per-project install that teammates get from the repo, put the same folders at `.cursor/skills/` and `.cursor/agents/` inside the project.
 
 Invoke as `/plan-build-review` followed by the arguments in the same message, e.g. `/plan-build-review push worktree`. See [Running in Cursor](#running-in-cursor) for what differs.
 
@@ -468,6 +477,11 @@ No other dependencies. The skill itself is pure markdown — no runtime, no npm 
 
 **Cursor: the skill shows a literal `$ARGUMENTS` or ignores my arguments**
 - Cursor does not substitute the placeholder; the skill reads the words after `/plan-build-review` in your message instead. Put the arguments in the same message as the slash command.
+
+**Cursor: `/plan-build-review` is not in the slash menu or Customize after a manual install**
+- You symlinked. Cursor does not follow symlinks under `~/.cursor/skills`; replace the link with a real copy of the folder (see [In Cursor](#in-cursor)) and restart.
+- Check that the copied folder is exactly `~/.cursor/skills/plan-build-review/SKILL.md` — the folder name must match the `name:` in the frontmatter.
+- Check Cursor Settings → Rules, Skills and Subagents for a per-skill toggle that is off.
 
 **Cursor: the skill started editing before I approved the plan**
 - The agent cannot enter Plan mode itself. Toggle Plan mode (Shift+Tab) when the skill asks, or reply only with revision requests until you type "approved".
