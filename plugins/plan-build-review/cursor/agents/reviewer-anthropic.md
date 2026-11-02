@@ -1,11 +1,12 @@
 ---
 name: reviewer-anthropic
 description: Read-only adversarial code reviewer pinned to the Anthropic model family. Spawned by the plan-build-review skill in Phase 6c with an explicit lens (architecture or correctness). Not for proactive use.
-# Verify this ID with `agent --list-models` in the Cursor CLI (or Settings → Models) and edit if it differs.
-# Convention: <base>-<effort>[-fast], e.g. gpt-5.5-medium, claude-opus-5-5-fast, grok-4.7-high-fast.
+# Syntax (cursor.com/docs/agent/subagents): a base model ID, optionally with bracket options,
+# e.g. claude-opus-5[effort=high], composer-2.5[fast=false]. IDs: cursor.com/docs/models-and-pricing.
+# Unknown IDs and models missing from your plan fall back silently — check the `Reviewer model:` line.
 # Cursor silently falls back to a compatible model when the pinned one is unavailable on your plan.
-# Other Anthropic options: claude-sonnet-5-5-high, claude-opus-5-5-fast
-model: claude-opus-5-5-medium
+# Other Anthropic options: claude-opus-5-5[effort=high], claude-sonnet-5-5, claude-opus-5-5-fast
+model: claude-opus-5-5
 readonly: true
 is_background: false
 ---

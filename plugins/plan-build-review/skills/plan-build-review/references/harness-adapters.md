@@ -32,15 +32,15 @@ If neither set of signals matches, use the Cursor column (it assumes the least).
 
 ## Cursor reviewer roster
 
-The plugin ships five read-only reviewer subagents under `cursor/agents/`, one per model family, each pinned via `model:` frontmatter. IDs follow Cursor's `<base>-<effort>[-fast]` convention; confirm them with `agent --list-models` in the Cursor CLI (or Settings → Models) and edit the `model:` line if your account's catalog differs. A family whose model your plan lacks simply falls back silently, which the `Reviewer model:` check catches.
+The plugin ships five read-only reviewer subagents under `cursor/agents/`, one per model family, each pinned via `model:` frontmatter. Per Cursor's subagent docs the value is a base model ID, optionally with bracket options (`claude-opus-5[effort=high]`, `composer-2.5[fast=false]`); available IDs are listed at cursor.com/docs/models-and-pricing. A family whose model your plan lacks falls back silently, which the `Reviewer model:` check catches — edit the `model:` line if a pin never holds.
 
 | Subagent | Family | Pinned model |
 |---|---|---|
-| `reviewer-anthropic` | Anthropic | `claude-opus-5-5-medium` |
-| `reviewer-openai` | OpenAI | `gpt-5.6-sol-medium` |
-| `reviewer-google` | Google | `gemini-4-argon-medium` |
-| `reviewer-xai` | xAI | `grok-4.7-high-fast` |
-| `reviewer-meta` | Meta | `muse-wonder-1.0-high` |
+| `reviewer-anthropic` | Anthropic | `claude-opus-5-5` |
+| `reviewer-openai` | OpenAI | `gpt-5.6-sol` |
+| `reviewer-google` | Google | `gemini-4-argon` |
+| `reviewer-xai` | xAI | `grok-4.7` |
+| `reviewer-meta` | Meta | `muse-wonder-1.0` |
 
 They are only present when the plugin was installed through a Cursor marketplace (or the files were copied/symlinked into `~/.cursor/agents/`). A symlink install of the skill alone (`~/.claude/skills/`) does **not** carry them.
 
